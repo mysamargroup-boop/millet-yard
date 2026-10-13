@@ -1,0 +1,26 @@
+[
+    {
+        "id": "437bf987-51cc-443a-81dd-12f03030f0af",
+        "slug": "art-of-gifting",
+        "title": "The Art of Gifting: Why Personalization Matters",
+        "author": "Shashank Nema",
+        "content": "Gifting is an art form...",
+        "image_url": "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=800&q=80",
+        "image_key": "blog-1",
+        "published_at": null,
+        "created_at": "2026-02-03 15:19:40.574678+00",
+        "updated_at": "2026-02-03 15:19:40.574678+00"
+    },
+    {
+        "id": "bfef921f-1f26-4e91-9bfb-5bf4234aebd8",
+        "slug": "modern-desk-setup",
+        "title": "Creating the Perfect Modern Wooden Desk Setup",
+        "author": "Team Nema",
+        "content": "Your workspace defines your productivity...",
+        "image_url": "https://images.unsplash.com/photo-1497215842964-222b430dc094?auto=format&fit=crop&w=800&q=80",
+        "image_key": "blog-2",
+        "published_at": null,
+        "created_at": "2026-02-03 15:19:40.574678+00",
+        "updated_at": "2026-02-03 15:19:40.574678+00"
+    }
+]

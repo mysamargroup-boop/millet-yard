@@ -1,0 +1,56 @@
+name = "shop-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+# Cron triggers for scheduled tasks
+[triggers]
+crons = ["30 3 * * *"]  # Run daily at 9 AM IST (3:30 AM UTC)
+
+
+# Common/Production variables
+[vars]
+ENVIRONMENT = "production"
+SMTP_HOST = ""
+SMTP_PORT = "587"
+SMTP_USER = ""
+SMTP_PASS = ""
+FROM_EMAIL = "noreply@woody.co.in"
+EMAIL_API_KEY = ""
+CONNECT_WHATSAPP = "919691045405"
+
+# Optional: Cloudflare KV binding (used by helpers.js rate limiting if enabled)
+# Create a KV namespace in Cloudflare dashboard and bind it as `KV`.
+# kv_namespaces = [{ binding = "KV", id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }]
+
+# --- Environments ---
+# These are used by `wrangler deploy --env <name>` and the Node deploy script.
+
+[env.production]
+name = "shop-api-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+SMTP_HOST = ""
+SMTP_PORT = "587"
+SMTP_USER = ""
+SMTP_PASS = ""
+FROM_EMAIL = "support@milletyard.com"
+EMAIL_API_KEY = ""
+CONNECT_WHATSAPP = "919691045405"
+NEXT_PUBLIC_SITE_URL = "https://milletyard.com"
+WHATSAPP_API_VERSION = "v20.0"
+
+[env.staging]
+name = "shop-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+

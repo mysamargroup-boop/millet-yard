@@ -1,0 +1,35 @@
+#
+# Cloudflare Worker local dev variables
+# Copy to `cloudflare-workers/.dev.vars` for `wrangler dev`
+#
+# IMPORTANT:
+# - Never commit real secrets in `.dev.vars`
+# - For production, set secrets in Cloudflare Dashboard or via:
+#   `wrangler secret put <NAME> --env production`
+#
+
+ENVIRONMENT=development
+
+# Optional: edge cache tuning (for GET endpoints)
+EDGE_CACHE_BROWSER_TTL_SEC=60
+EDGE_CACHE_EDGE_TTL_SEC=300
+EDGE_CACHE_SWR_SEC=86400
+
+# CORS (dev: CORS is permissive if ENVIRONMENT != production)
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Cashfree
+CASHFREE_APP_ID=your-cashfree-app-id
+CASHFREE_SECRET_KEY=your-cashfree-secret-key
+CASHFREE_ENV=SANDBOX
+
+# Admin endpoints auth (Worker)
+API_KEY=your-worker-admin-api-key
+
+# Chat (optional)
+GEMINI_API_KEY=your-gemini-api-key
+

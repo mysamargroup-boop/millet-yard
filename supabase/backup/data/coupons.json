@@ -1,0 +1,26 @@
+[
+    {
+        "code": "SUMMER99",
+        "type": "percent",
+        "value": "99.00",
+        "active": true,
+        "created_at": "2025-12-28 17:43:44.408331+00",
+        "updated_at": "2025-12-28 17:43:44.408331+00"
+    },
+    {
+        "code": "WELCOME50",
+        "type": "percent",
+        "value": "50.00",
+        "active": true,
+        "created_at": "2026-02-03 15:21:28.448048+00",
+        "updated_at": "2026-02-03 15:21:28.448048+00"
+    },
+    {
+        "code": "FLAT100",
+        "type": "flat",
+        "value": "100.00",
+        "active": true,
+        "created_at": "2026-02-03 15:21:28.448048+00",
+        "updated_at": "2026-02-03 15:21:28.448048+00"
+    }
+]

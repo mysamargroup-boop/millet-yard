@@ -1,0 +1,171 @@
+1) Seed initial data for categories, products, coupons, site_settings
+2) Migrate image storage to Supabase Storage buckets
+3) Build admin auth with Supabase Auth and roles
+4) Replace JSON file reads with Supabase queries in API routes
+5) Add REST/RPC endpoints or use Supabase client on Next.js
+6) Implement webhooks for Cashfree payment status updates
+7) Write migrations for schema changes and CI pipeline
+8) Add rate-limiting for marketing sends and logging of errors
+9) Add audit logs for admin changes (settings, products, coupons)
+10) Implement background jobs for WhatsApp batch sending
+11) Add caching layer for read-heavy endpoints (Edge cache/CDN)
+12) Add activity dashboard: orders, payments, campaigns metrics
+13) Write integration tests for orders/payments/marketing flows
+14) Configure Supabase project and get connection strings
+15) Set up Supabase Auth with admin role authentication
+16) Create service role key for server-side operations
+17) Update .env.local with Supabase credentials
+18) Install @supabase/supabase-js package
+19) Create Supabase client helper functions
+20) Update API routes to use Supabase instead of JSON files
+21) Create data migration scripts from JSON to Supabase
+22) Test all admin panel functionality with Supabase
+23) Update frontend to use new API endpoints
+24) Set up Supabase Storage for image uploads
+25) Add database backups and monitoring
+
+# DATABASE SETUP INSTRUCTIONS:
+
+## Step 1: Create Supabase Project
+1. Go to https://supabase.com
+2. Create new project
+3. Get project URL and keys from Settings > API
+
+## Step 2: Add Credentials to .env.local
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+```
+
+## Step 3: Setup Database
+1. Go to Supabase SQL Editor
+2. Copy and paste entire content of: `supabase/schema.sql`
+3. Click "Run" to execute
+
+## Step 4: Test Features
+- Admin Panel: http://localhost:3000/sr-admin
+- Orders Page: http://localhost:3000/sr-admin/orders
+- Test order management (cancel/return/refund)
+
+# PENDING HIGH PRIORITY TASKS:
+26) Add transaction_id field to orders table schema ✓ COMPLETED
+27) Update webhook handler to store transaction_id from Cashfree ✓ COMPLETED
+28) Update admin panel to display transaction_id for orders ✓ COMPLETED
+29) Add Supabase credentials to .env.local file
+30) Create migration script for transaction_id field ✓ COMPLETED
+31) Add order management features (cancel/return/refund) ✓ COMPLETED
+32) Update admin panel UI for order management ✓ COMPLETED
+33) Add order status history tracking ✓ COMPLETED
+34) Create single migration file ✓ COMPLETED
+
+# NEXT STEPS:
+35) Add Supabase credentials to .env.local
+36) Create Supabase project and run schema.sql
+37) Run complete_migration.sql in Supabase
+38) Test order management features in admin panel
+39) Migrate existing data to Supabase
+
+
+If Cloudflare Workers:
+
+Supabase Edge Functions Deno par chalte hain, jo ki Cloudflare Workers ke environment se bahut milta-julta hai. Agar aapko future me Cloudflare par move karna ho, to aapko bas yeh karna hoga:
+
+Copy-Paste: Supabase function (index.ts) ke code ko copy karke Cloudflare Worker ke file me paste karein.
+Secrets Set Karein: Jaise Supabase me secrets daale, waise hi Cloudflare dashboard me bhi daalne honge.
+Minor Adjustments: Ho sakta hai ki request/response handle karne ke tarike me 1-2 line ka chhota sa badlaav karna pade, par poora logic (payment, signature, WhatsApp) waisa ka waisa hi rahega.
+Vercel se nikalna mushkil tha. Ab ek serverless platform (Supabase) se doosre (Cloudflare) par jaana bahut aasan hai.
+
+
+# 🔄 HOMEPAGE SECTION ORDER (Updated Feb 9, 2026)
+
+1. Mobile Search Bar (mobile only)
+2. PromoBanners (Free Shipping Banner)
+3. SlidingHero (Desktop sees this right after banner)
+4. SlidingCards (mobile only)
+5. ImageGrid
+6. PopularProducts (Popular Choices)
+7. IconCategoryGrid (Under ₹99, ₹199...)
+8. CategoryShowcase (Trending Collections)
+9. FeaturedCategories (Shop By Category)
+10. DiscountDeals
+11. VideoProductSlider (Artisans At Work)
+12. ShopByOccasion
+13. BadgeProducts (Featured Products)
+14. BestSellers
+15. PromoSlider
+16. Testimonials
+17. VideoGallery (Watch & Shop)
+18. RecentlyViewed
+19. SubscriptionPopup
+
+
+# ⚠️ PROJECT CONS / KNOWN ISSUES
+
+## Code Architecture
+- [x] **New Section Order**
+    1. SlidingHero (after PromoBanners)
+    2. SlidingCards (mobile only)
+    3. ImageGrid
+    4. PopularProducts (Popular Choices)
+    5. IconCategoryGrid (Quick Links) - added margin mb-12
+    6. CategoryShowcase (Trending Collections)
+    7. FeaturedCategories (Shop By Category) - updated icon to Tag
+    8. DiscountDeals - redesigned without images, vibrant gradients
+    9. PromoSlider - moved below DiscountDeals
+    10. VideoProductSlider (Artisan) - single column mobile
+    11. ShopByOccasion
+    12. BadgeProducts (Featured) - 3 columns, mobile shadows
+    13. BestSellers
+    14. Testimonials
+    15. ReviewsCarousel (Product Reviews) - added below Testimonials
+    16. VideoGallery (Watch & Shop)
+    17. RecentlyViewed
+    18. SubscriptionPopup
+
+- [x] **Styling Updates**
+    - [x] Consistent thin underlines with section-specific colors
+    - [x] Transparent backgrounds with subtle gradients
+    - [x] Mobile padding/margins improved (check security advisors)
+## Database
+- [ ] Some tables missing RLS policies (check security advisors)
+- [ ] Abandoned cart admin UI not built yet
+- [ ] Testimonials table may be empty (needs data)
+
+## Frontend
+- [ ] 404 images from Unsplash/Cloudinary in some components
+- [ ] Mobile performance could be optimized (lazy load more)
+- [ ] No offline support despite PWA setup
+
+## Backend/Workers
+- [ ] WhatsApp templates not configured in production
+- [ ] Cron jobs need Cloudflare Workers paid plan for scheduling
+- [ ] Error logging could be more comprehensive
+
+## Testing
+- [ ] No automated tests
+- [ ] No E2E tests for payment flows
+- [ ] Manual testing required for each deploy
+
+
+
+🔄 Homepage Section Order (Updated):
+Mobile Search Bar (mobile only)
+PromoBanners (Free Shipping Banner)
+SlidingCards (mobile only) - Moved here
+IconCategoryGrid (Under ₹99, Under ₹199...)
+CategoryShowcase (Trending Collections) - Moved here
+SlidingHero (Hero slides)
+FeaturedCategories (Shop By Category)
+ImageGrid
+DiscountDeals
+VideoProductSlider (Artisans At Work)
+ShopByOccasion
+BadgeProducts
+BestSellers
+PopularProducts (Popular Choices)
+PromoSlider
+Testimonials
+VideoGallery (Watch & Shop)
+RecentlyViewed
+SubscriptionPopup

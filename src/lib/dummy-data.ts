@@ -1,0 +1,205 @@
+/**
+ * Centralized Dummy/Placeholder Data for Millet Yard
+ * 
+ * Sourced from authentic unpolished Shree Anna Millets & stone-ground superfoods.
+ */
+
+import type { Product, Category, Testimonial, SiteImage } from './types';
+import { slugify } from './utils';
+
+// ===== 8 AUTHENTIC SHREE ANNA CATEGORIES =====
+export const DUMMY_CATEGORIES: Category[] = [
+    {
+        id: 'unpolished-millets',
+        name: 'Unpolished Millets',
+        imageUrl: '/images/products/copy-of-foxtail-millet-shreeanna-500-gram/image_1.png',
+        description: '100% positive unpolished Shree Anna grains (Foxtail, Kodo, Little, Barnyard, Browntop).',
+        linkUrl: '/collections/unpolished-millets',
+        imageHint: 'unpolished millets',
+        is_featured: true,
+        featured_order: 1,
+    },
+    {
+        id: 'wholesome-atta',
+        name: 'Wholesome Atta',
+        imageUrl: '/images/products/barnyard-millet-atta-100-natural-freshly-ground-barnyard-millet-flour/image_1.png',
+        description: 'Slow cold stone-ground flours preserving live germ, enzymes, and natural dietary fiber.',
+        linkUrl: '/collections/wholesome-atta',
+        imageHint: 'stone ground atta',
+        is_featured: true,
+        featured_order: 2,
+    },
+    {
+        id: 'superfood-combos',
+        name: 'Superfood Combos',
+        imageUrl: '/images/products/browntop-millet-atta-100-natural-millet-flour-high-fibre-wholesome-nutrition/image_1.png',
+        description: 'Curated value saver bundles for diabetic care, gut health, and family nutrition.',
+        linkUrl: '/collections/superfood-combos',
+        imageHint: 'millet combos',
+        is_featured: true,
+        featured_order: 3,
+    },
+    {
+        id: 'idli-dosa-rawa',
+        name: 'Idli & Dosa Rawa',
+        imageUrl: '/images/products/copy-of-kodo-millet-shreeanna-500-gram/image_1.png',
+        description: 'Fermentation-friendly stone-cracked millet rawa for light, fluffy idlis and crispy dosas.',
+        linkUrl: '/collections/idli-dosa-rawa',
+        imageHint: 'millet rawa',
+        is_featured: true,
+        featured_order: 4,
+    },
+    {
+        id: 'flakes-daliya',
+        name: 'Flakes & Daliya',
+        imageUrl: '/images/products/chana-jau-sattu-roasted-bengal-gram-barley-flour-high-protein-high-fiber-100-natural/image_1.png',
+        description: 'Wholesome breakfast porridge daliya and flattened flakes rich in bioavailable iron.',
+        linkUrl: '/collections/flakes-daliya',
+        imageHint: 'millet daliya',
+        is_featured: true,
+        featured_order: 5,
+    },
+    {
+        id: 'nutritious-laddoos',
+        name: 'Nutritious Laddoos',
+        imageUrl: '/images/products/nutritious-ragi-laddoo/image_1.png',
+        description: 'Artisanal Bilona A2 Desi Ghee & Jaggery ragi laddoos for bone strength and natural energy.',
+        linkUrl: '/collections/nutritious-laddoos',
+        imageHint: 'ragi laddoos',
+        is_featured: true,
+        featured_order: 6,
+    },
+    {
+        id: 'summer-sattu-cooling-collection',
+        name: 'Summer Cooling Sattu',
+        imageUrl: '/images/products/chana-sattu-roasted-bengal-gram-flour/image_1.png',
+        description: 'Traditional sand-roasted Chana & Jau Sattu for instant cooling hydration and natural protein.',
+        linkUrl: '/collections/summer-sattu-cooling-collection',
+        imageHint: 'chana sattu',
+        is_featured: true,
+        featured_order: 7,
+    },
+    {
+        id: 'traditional-pickles',
+        name: 'Traditional Pickles',
+        imageUrl: '/images/products/millet-yard-premium-traditional-aam-ka-achaar-mango-pickle-authentic-indian-homemade-style-mango-pickle-1-kg/image_1.png',
+        description: 'Sun-matured raw mango and lemon pickles in cold-pressed wood-churned mustard oil.',
+        linkUrl: '/collections/traditional-pickles',
+        imageHint: 'traditional achaar',
+        is_featured: true,
+        featured_order: 8,
+    },
+];
+
+// ===== AUTHENTIC SHREE ANNA PRODUCTS =====
+export const DUMMY_PRODUCTS: Product[] = [
+    {
+        id: 'm1',
+        name: 'Unpolished Foxtail Millet (Kangni) 500g',
+        price: 149,
+        regularPrice: 199,
+        salePrice: 149,
+        imageUrl: '/images/products/copy-of-foxtail-millet-shreeanna-500-gram/image_1.png',
+        imageHint: 'foxtail millet',
+        category: 'Unpolished Millets',
+        rating: 4.9,
+        reviewCount: 142,
+        badge: 'Bestseller',
+        description: '100% unpolished positive grain, rich in Vitamin B12 and dietary fiber for balanced energy.',
+        shortDescription: '100% unpolished positive Foxtail Millet grain, rich in Vitamin B12 and low GI.',
+        features: ['100% Unpolished', 'Low GI (~54)', 'Rich in Vitamin B12'],
+        inventory: 35,
+        tags: ['Diabetes Friendly', 'Heart Health'],
+        galleryImages: ['/images/products/copy-of-foxtail-millet-shreeanna-500-gram/image_1.png'],
+    },
+    {
+        id: 'm2',
+        name: 'Unpolished Kodo Millet (Varagu) 500g',
+        price: 159,
+        regularPrice: 210,
+        salePrice: 159,
+        imageUrl: '/images/products/copy-of-kodo-millet-shreeanna-500-gram/image_1.png',
+        imageHint: 'kodo millet',
+        category: 'Unpolished Millets',
+        rating: 4.9,
+        reviewCount: 128,
+        badge: 'Diabetic Friendly',
+        description: 'Ancient positive grain rich in polyphenols and antioxidants, ideal for diabetic blood sugar management.',
+        shortDescription: 'Ancient positive grain rich in polyphenols and antioxidants, ideal for sugar control.',
+        features: ['Low GI (~50)', 'High Antioxidants', 'Gluten Free'],
+        inventory: 40,
+        tags: ['Diabetic Friendly', 'Weight Loss'],
+        galleryImages: ['/images/products/copy-of-kodo-millet-shreeanna-500-gram/image_1.png'],
+    },
+    {
+        id: 'm3',
+        name: 'Stone-Ground Barnyard Millet Atta 1kg',
+        price: 249,
+        regularPrice: 299,
+        salePrice: 249,
+        imageUrl: '/images/products/barnyard-millet-atta-100-natural-freshly-ground-barnyard-millet-flour/image_1.png',
+        imageHint: 'barnyard atta',
+        category: 'Wholesome Atta',
+        rating: 4.8,
+        reviewCount: 96,
+        badge: 'Gluten Free',
+        description: 'Freshly ground unadulterated Sanwa flour, light on the stomach and packed with iron.',
+        shortDescription: 'Freshly stone-ground unadulterated Barnyard Sanwa flour, light on the stomach.',
+        features: ['Stone-Ground', 'Gluten Free', 'High Bioavailable Iron'],
+        inventory: 50,
+        tags: ['Gut Health', 'Fasting Vrat'],
+        galleryImages: ['/images/products/barnyard-millet-atta-100-natural-freshly-ground-barnyard-millet-flour/image_1.png'],
+    },
+    {
+        id: 'm4',
+        name: 'Browntop Millet Atta (High Fiber) 1kg',
+        price: 289,
+        regularPrice: 349,
+        salePrice: 289,
+        imageUrl: '/images/products/browntop-millet-atta-100-natural-millet-flour-high-fibre-wholesome-nutrition/image_1.png',
+        imageHint: 'browntop atta',
+        category: 'Wholesome Atta',
+        rating: 4.9,
+        reviewCount: 79,
+        badge: 'Highest Fiber',
+        description: 'The rarest supergrain with 12.5% natural dietary fiber for superior colon and gut health.',
+        shortDescription: 'Rarest positive supergrain flour with 12.5% natural dietary fiber for gut health.',
+        features: ['12.5% Dietary Fiber', 'Colon Cleansing', 'Prebiotic Rich'],
+        inventory: 25,
+        tags: ['Gut Health', 'Constipation Relief'],
+        galleryImages: ['/images/products/browntop-millet-atta-100-natural-millet-flour-high-fibre-wholesome-nutrition/image_1.png'],
+    },
+];
+
+export function getDummyProductBySlug(slug: string): Product | null {
+    const found = DUMMY_PRODUCTS.find(p => slugify(p.name) === slug || p.id === slug);
+    return found || null;
+}
+
+// ===== TESTIMONIALS =====
+export const DUMMY_TESTIMONIALS: Testimonial[] = [
+    {
+        id: 't1',
+        customer_name: 'Dr. Sunita Sharma',
+        content: 'Millet Yard unpolished Kodo and Foxtail millets have made a measurable difference for my diabetic patients. True stone-ground purity.',
+        rating: 5,
+        is_visible: true,
+        created_at: '2026-02-14',
+    },
+    {
+        id: 't2',
+        customer_name: 'Rajesh Mehra',
+        content: 'After switching from white rice to Millet Yard Barnyard and Little Millet, my post-lunch sluggishness completely vanished. Light and easy to cook!',
+        rating: 5,
+        is_visible: true,
+        created_at: '2026-03-01',
+    },
+    {
+        id: 't3',
+        customer_name: 'Pooja Deshmukh',
+        content: 'The aroma of the stone-ground Ragi flour and Bilona Ghee Laddoos takes me right back to our ancestral village. 10/10 quality.',
+        rating: 5,
+        is_visible: true,
+        created_at: '2026-03-10',
+    },
+];

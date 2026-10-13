@@ -1,0 +1,4004 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Environment variables will be available at runtime
+// These are placeholder declarations for type checking
+const SUPABASE_URL = globalThis.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = globalThis.SUPABASE_SERVICE_ROLE_KEY;
+const PUBLIC_URL = globalThis.PUBLIC_URL || 'https://localhost:3000';
+const ALLOWED_ORIGIN = globalThis.ALLOWED_ORIGIN || PUBLIC_URL;
+
+// Create Supabase admin client
+function createSupabaseAdmin(env) {
+  const supabaseUrl = env?.SUPABASE_URL;
+  const supabaseKey = env?.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      `Missing Supabase env. SUPABASE_URL=${Boolean(supabaseUrl)} SUPABASE_SERVICE_ROLE_KEY=${Boolean(supabaseKey)}`
+    );
+  }
+
+  return createClient(
+    supabaseUrl,
+    supabaseKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+// CORS headers helper
+function getCORSHeaders(env, request) {
+  const allowedOrigin = env?.ALLOWED_ORIGIN || env?.PUBLIC_URL || 'http://localhost:3000';
+  const requestOrigin = request?.headers?.get('Origin') || '*';
+
+  // Handle multiple origins
+  const allowedOrigins = allowedOrigin.split(',').map(origin => origin.trim());
+  let origin = '*';
+
+  // In development, allow all origins
+  if (env?.ENVIRONMENT !== 'production') {
+    origin = '*';
+  } else if (allowedOrigins.includes(requestOrigin)) {
+    origin = requestOrigin;
+  } else if (allowedOrigins[0]) {
+    origin = allowedOrigins[0];
+  }
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, X-API-Key, x-client-info, CF-Access-Client-Id, CF-Access-Client-Secret, x-forwarded-host, origin, referer',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+// Helper function for HMAC SHA256
+async function hmacSha256Hex(secret, message) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(message)
+  );
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Timing safe comparison
+function timingSafeEqualHex(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+// WhatsApp template message sender
+async function sendWhatsAppTemplateMessage(env, input) {
+  const accessToken =
+    env.WHATSAPP_CLOUD_ACCESS_TOKEN || env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId =
+    env.WHATSAPP_CLOUD_PHONE_NUMBER_ID || env.WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = env.WHATSAPP_API_VERSION || 'v20.0';
+
+  if (!accessToken || !phoneNumberId) {
+    return;
+  }
+
+  const normalizedLanguage =
+    input.languageCode === 'en' ? 'en_US' : input.languageCode;
+
+  const components = [];
+
+  if (input.headerParameters.length > 0) {
+    components.push({
+      type: 'header',
+      parameters: input.headerParameters.map((text) => ({
+        type: 'text',
+        text,
+      })),
+    });
+  }
+
+  if (input.bodyParameters.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: input.bodyParameters.map((text) => ({
+        type: 'text',
+        text,
+      })),
+    });
+  }
+
+  await fetch(
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: input.to,
+        type: 'template',
+        template: {
+          name: input.templateName,
+          language: { code: normalizedLanguage },
+          ...(components.length > 0 ? { components } : {}),
+        },
+      }),
+    }
+  );
+}
+
+async function sendWhatsAppTextMessage(env, input) {
+  const accessToken =
+    env.WHATSAPP_CLOUD_ACCESS_TOKEN || env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId =
+    env.WHATSAPP_CLOUD_PHONE_NUMBER_ID || env.WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = env.WHATSAPP_API_VERSION || 'v20.0';
+
+  if (!accessToken) {
+    throw new Error(
+      'WHATSAPP_CLOUD_ACCESS_TOKEN or WHATSAPP_ACCESS_TOKEN is not set'
+    );
+  }
+  if (!phoneNumberId) {
+    throw new Error(
+      'WHATSAPP_CLOUD_PHONE_NUMBER_ID or WHATSAPP_PHONE_NUMBER_ID is not set'
+    );
+  }
+
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: input.to,
+      type: 'text',
+      text: {
+        body: input.body,
+        preview_url: Boolean(input.previewUrl),
+      },
+    }),
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (_e) {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      (data &&
+        (data.error?.message || data.error?.error_user_msg || data.message)) ||
+      response.statusText ||
+      'WhatsApp API request failed';
+    throw new Error(`WhatsApp API error (${response.status}): ${message}`);
+  }
+
+  return data;
+}
+
+// Helper function to send Slack notification
+async function sendSlackNotification(env, message) {
+  const slackWebhookUrl = env.SLACK_WEBHOOK_URL;
+
+  if (!slackWebhookUrl || !env.SLACK_ENABLED || env.SLACK_ENABLED !== 'true') {
+    return;
+  }
+
+  try {
+    const response = await fetch(slackWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: message,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Slack notification failed: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('Error sending Slack notification:', error);
+  }
+}
+
+// Helper function to trigger shipping order creation
+async function createShippingOrder(env, orderId) {
+  const baseUrl = env.NEXT_PUBLIC_SITE_URL || env.NEXT_PUBLIC_BASE_URL || 'https://business.woody.co.in';
+  const shippingApiUrl = `${baseUrl}/api/shiprocket/order`;
+
+  if (!orderId) return;
+
+  try {
+    console.log(`Triggering shipping order for ${orderId} to ${shippingApiUrl}`);
+    // Fire and forget, but we await fetch start at least
+    const response = await fetch(shippingApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Shipping order creation failed: ${response.status} ${text}`);
+    } else {
+      // const data = await response.json();
+      console.log('Shipping order creation triggered');
+    }
+  } catch (error) {
+    console.error('Error creating shipping order:', error);
+  }
+}
+
+
+// Route handler for requesting OTP (WhatsApp Login)
+
+// Route handler for requesting OTP (WhatsApp Login - Stateless)
+async function handleAuthRequestOTP(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+  }
+
+  try {
+
+    const { phone } = await request.json();
+
+    if (!phone) {
+      return new Response(JSON.stringify({ error: 'Phone number is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+      });
+    }
+
+    const supabase = createSupabaseAdmin(env);
+
+    // 1. Check if login is enabled
+    const { data: settings } = await supabase
+      .from('site_settings')
+      .select('customer_login_enabled, whatsapp_otp_template')
+      .single();
+
+    if (!settings?.customer_login_enabled) {
+      return new Response(JSON.stringify({ error: 'Customer login is currently disabled' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+      });
+    }
+
+    // 1.5 Rate Limiting
+    // Fetch current limit status
+    const { data: limitData } = await supabase
+      .from('auth_rate_limits')
+      .select('*')
+      .eq('phone', phone)
+      .maybeSingle(); // Changed single() to maybeSingle() to handle null
+
+    const now = new Date();
+    const BLOCK_DURATION_MINUTES = 15;
+    const MAX_ATTEMPTS = 3;
+    const WINDOW_MINUTES = 5;
+
+    if (limitData) {
+      // Check if blocked
+      if (limitData.blocked_until && new Date(limitData.blocked_until) > now) {
+        const blockedUntil = new Date(limitData.blocked_until);
+        const minutesLeft = Math.ceil((blockedUntil - now) / 60000);
+        return new Response(JSON.stringify({
+          error: `Too many attempts. Please try again in ${minutesLeft} minutes.`
+        }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+        });
+      }
+
+      // Check window reset
+      const lastAttempt = new Date(limitData.last_attempt_at);
+      const timeDiffMinutes = (now - lastAttempt) / 60000;
+
+      if (timeDiffMinutes > WINDOW_MINUTES) {
+        // Reset if outside window
+        await supabase.from('auth_rate_limits').update({
+          count: 1,
+          last_attempt_at: now.toISOString(),
+          blocked_until: null
+        }).eq('phone', phone);
+      } else {
+        // Within window, increment count
+        const newCount = limitData.count + 1;
+
+        if (newCount > MAX_ATTEMPTS) {
+          // Block user
+          const blockUntil = new Date(now.getTime() + BLOCK_DURATION_MINUTES * 60000);
+          await supabase.from('auth_rate_limits').update({
+            count: newCount,
+            last_attempt_at: now.toISOString(),
+            blocked_until: blockUntil.toISOString()
+          }).eq('phone', phone);
+
+          return new Response(JSON.stringify({
+            error: `Too many attempts. Blocked for ${BLOCK_DURATION_MINUTES} minutes.`
+          }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+          });
+        } else {
+          // Just increment
+          await supabase.from('auth_rate_limits').update({
+            count: newCount,
+            last_attempt_at: now.toISOString()
+          }).eq('phone', phone);
+        }
+      }
+    } else {
+      // First attempt, create record
+      await supabase.from('auth_rate_limits').insert({
+        phone,
+        count: 1,
+        last_attempt_at: now.toISOString()
+      });
+    }
+
+    // 2. Generate OTP
+    let otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Check for fixed OTP override (Admin/Test login)
+    if (env.CONNECT_WHATSAPP && phone === env.CONNECT_WHATSAPP) {
+      otp = '339633';
+    }
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes (timestamp)
+
+    // 3. Generate HMAC Hash (Stateless)
+    // Hash = HMAC(phone + otp + expiresAt + SECRET)
+    const secret = env.OTP_SECRET || 'default-secret-change-me';
+    const message = `${phone}.${otp}.${expiresAt}`;
+    const hash = await hmacSha256Hex(secret, message);
+
+    // 4. Send WhatsApp
+    const templateName = settings.whatsapp_otp_template;
+    let whatsappSent = false;
+
+    // TEST OVERRIDE: List of phone numbers that get OTP in response
+    const TEST_NUMBERS = ['918518024107', '919691045405'];
+    const isTestNumber = TEST_NUMBERS.includes(phone);
+
+    try {
+      if (!templateName) {
+        // Fallback to text message if no template configured
+        await sendWhatsAppTextMessage(env, {
+          to: phone,
+          body: `Your OTP is ${otp}. Valid for 5 minutes.`
+        });
+      } else {
+        await sendWhatsAppTemplateMessage(env, {
+          to: phone,
+          templateName: templateName,
+          languageCode: 'en',
+          bodyParameters: [otp],
+          headerParameters: []
+        });
+      }
+      whatsappSent = true;
+    } catch (whatsappError) {
+      console.error('WhatsApp Send Failed:', whatsappError);
+      // If not a test number, we should probably let the user know, 
+      // but for now we proceed silently or return error if critical.
+    }
+
+    // 5. Construct Response
+    // Production Security: NEVER return OTP in response for real users.
+    // Dev/Test: Return OTP if it's a test number or we are in dev.
+    const responsePayload = {
+      success: true,
+      message: whatsappSent ? 'OTP sent via WhatsApp' : 'OTP generated (WhatsApp failed)',
+      hash: `${hash}.${expiresAt}`,
+      phone
+    };
+
+    // CONDITIONAL EXPOSURE
+    if (isTestNumber) {
+      responsePayload.otp = otp; // <--- Visible ONLY for Test Numbers
+      responsePayload.message += ' (Test Mode: OTP included)';
+    }
+
+    return new Response(JSON.stringify(responsePayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+
+  } catch (error) {
+    console.error('OTP Request Error:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Failed to send OTP' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+  }
+}
+
+// Route handler for verifying OTP (Stateless)
+async function handleAuthVerifyOTP(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+  }
+
+  try {
+    const { phone, otp, hash } = await request.json();
+    if (!phone || !otp || !hash) {
+      return new Response(JSON.stringify({ error: 'Phone, OTP, and Hash are required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+      });
+    }
+
+    // 1. Parse Hash: "signature.expiry"
+    const [signature, expiresAtStr] = hash.split('.');
+    if (!signature || !expiresAtStr) {
+      return new Response(JSON.stringify({ error: 'Invalid hash format' }), { status: 400, headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) } });
+    }
+
+    const expiresAt = parseInt(expiresAtStr);
+
+    // 2. Check Expiry
+    if (Date.now() > expiresAt) {
+      return new Response(JSON.stringify({ error: 'OTP has expired' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+      });
+    }
+
+    // 3. Recompute Hash
+    const secret = env.OTP_SECRET || 'default-secret-change-me';
+    const message = `${phone}.${otp}.${expiresAt}`;
+    const validSignature = await hmacSha256Hex(secret, message);
+
+    // 4. Compare (Timing Safe)
+    if (!timingSafeEqualHex(signature, validSignature)) {
+      return new Response(JSON.stringify({ error: 'Invalid OTP' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+      });
+    }
+
+    // 5. Success! Upsert Customer
+    const supabase = createSupabaseAdmin(env);
+
+    // Check if customer exists first to preserve existing data if we want, 
+    // but UPSERT is better to ensure they exist.
+    // We only update updated_at on login typically, or create if new.
+    // If they exist, we just get their data.
+
+    const { data: customer, error: upsertError } = await supabase
+      .from('customers')
+      .upsert({
+        phone,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'phone' })
+      .select()
+      .single();
+
+    if (upsertError) {
+      console.error('Customer Upsert Error:', upsertError);
+      // Even if DB fails, OTP was valid. But we need customer data.
+      throw upsertError;
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      customer: customer
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+
+  } catch (error) {
+    console.error('OTP Verify Error:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Verification failed' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) },
+    });
+  }
+}
+
+
+async function handleCashfreeWebhook(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const rawBody = await request.text();
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (_e) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    const signature = request.headers.get('x-webhook-signature');
+    const webhookSecret = env.CASHFREE_WEBHOOK_SECRET;
+
+    if (webhookSecret && signature) {
+      const expected = await hmacSha256Hex(webhookSecret, rawBody);
+      if (!timingSafeEqualHex(signature, expected)) {
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        });
+      }
+    }
+
+    const {
+      order_id,
+      order_status,
+      payment_status,
+      customer_details,
+      order_amount,
+      payment_session_id,
+      transaction_id,
+    } = body || {};
+
+    const supabase = createSupabaseAdmin(env);
+    const externalOrderId = String(order_id || '');
+
+    if (!externalOrderId) {
+      return new Response(JSON.stringify({ error: 'Missing order_id' }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    const { data: existingOrder } = await supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('external_order_id', externalOrderId)
+      .maybeSingle();
+
+    if (existingOrder) {
+      const updateData = {
+        status:
+          payment_status === 'SUCCESS' || order_status === 'PAID'
+            ? 'PAID'
+            : order_status,
+        payment_status: payment_status,
+        transaction_id:
+          transaction_id || payment_session_id || existingOrder.transaction_id,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', existingOrder.id);
+
+      if (error) throw error;
+    } else {
+      const newOrder = {
+        external_order_id: externalOrderId,
+        customer_name: customer_details?.customer_name || 'Customer',
+        customer_phone: customer_details?.customer_phone || '',
+        status:
+          payment_status === 'SUCCESS' || order_status === 'PAID'
+            ? 'PAID'
+            : order_status,
+        payment_status: payment_status,
+        transaction_id: transaction_id || payment_session_id,
+        total_amount: Number(order_amount),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('orders').insert(newOrder);
+      if (error) throw error;
+    }
+
+    const { data: updatedOrderForPayment } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('external_order_id', externalOrderId)
+      .maybeSingle();
+
+    await supabase.from('payments').insert({
+      order_id: updatedOrderForPayment?.id || null,
+      provider: 'cashfree',
+      status: payment_status,
+      amount: Number(order_amount),
+      currency: 'INR',
+      session_id: payment_session_id,
+      provider_order_id: externalOrderId,
+      transaction_id: transaction_id,
+      raw_response: body,
+      created_at: new Date().toISOString(),
+    });
+
+    if (payment_status === 'SUCCESS' || order_status === 'PAID') {
+      const toPhone =
+        customer_details?.customer_phone ||
+        env.WHATSAPP_TEST_TO ||
+        env.DEFAULT_TEST_WHATSAPP_TO;
+      const templateName =
+        env.WHATSAPP_ORDER_TEMPLATE_NAME || env.WHATSAPP_TEMPLATE_NAME;
+      const languageCode =
+        env.WHATSAPP_ORDER_TEMPLATE_LANGUAGE ||
+        env.WHATSAPP_TEMPLATE_LANGUAGE ||
+        'en_US';
+
+      if (toPhone && templateName) {
+        const templateValues = {
+          orderId: externalOrderId,
+          totalCost: typeof order_amount !== 'undefined' ? String(order_amount) : '',
+          customerName: customer_details?.customer_name || '',
+          customerPhone: customer_details?.customer_phone || '',
+        };
+
+        const itemsList = existingOrder?.order_items?.map(i => `- ${i.product_name} (x${i.quantity})`).join('\n') || 'No items info';
+        const address = existingOrder?.customer_address || 'Address not provided';
+
+        const slackMessage = `🎉 *New Order Received!* 🎉\n\n*Order ID:* ${externalOrderId}\n*Customer:* ${customer_details?.customer_name || 'N/A'}\n*Phone:* ${customer_details?.customer_phone || 'N/A'}\n*Amount:* ₹${order_amount}\n*Payment Status:* ${payment_status}\n\n*Items:*\n${itemsList}\n\n*Address:*\n${address}\n\n<https://business.woody.co.in/sr-admin/orders/${externalOrderId}|View Order in Admin Panel>`;
+
+        // Send Slack Notification
+        sendSlackNotification(env, slackMessage).catch(console.error);
+
+        // Trigger Shipping Order Creation (Fire and forget)
+        createShippingOrder(env, externalOrderId).catch(console.error);
+
+
+        const bodyKeys = (env.WHATSAPP_ORDER_TEMPLATE_BODY_KEYS ||
+          env.WHATSAPP_TEMPLATE_BODY_KEYS ||
+          'customerName,orderId,totalCost')
+          .split(',')
+          .map((k) => k.trim())
+          .filter(Boolean);
+        const headerKeys = (env.WHATSAPP_ORDER_TEMPLATE_HEADER_KEYS ||
+          env.WHATSAPP_TEMPLATE_HEADER_KEYS ||
+          '')
+          .split(',')
+          .map((k) => k.trim())
+          .filter(Boolean);
+
+        const bodyParameters = bodyKeys.map(
+          (key) => templateValues[key] || ''
+        );
+        const headerParameters = headerKeys.map(
+          (key) => templateValues[key] || ''
+        );
+
+
+
+
+        await sendWhatsAppTemplateMessage(env, {
+          to: toPhone,
+          templateName,
+          languageCode,
+          bodyParameters,
+          headerParameters,
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Webhook processing failed';
+
+    return new Response(
+      JSON.stringify({
+        error: 'Webhook processing failed',
+        details: message,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+}
+
+// Email Sender Helper (Generic HTTP API)
+async function sendEmailViaApi(env, { to, subject, html }) {
+  // Example for Resend/Mailgun/SendGrid structure
+  const apiKey = env.EMAIL_API_KEY;
+  const fromEmail = env.FROM_EMAIL || 'noreply@woody.co.in';
+
+  // Placeholder: If using Resend
+  // const url = 'https://api.resend.com/emails';
+  // const body = { from: fromEmail, to, subject, html };
+
+  // For now, we just log it as the user asked for "Setup structure"
+  console.log(`[Email Mock] To: ${to}, Subject: ${subject}`);
+
+  if (!apiKey) {
+    console.warn('Missing EMAIL_API_KEY. Email not sent.');
+    return { success: false, error: 'Email configuration missing' };
+  }
+
+  // Real implementation would be:
+  /*
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  return response.json();
+  */
+
+  return { success: true, mock: true };
+}
+
+async function handleSendEmail(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const { to, subject, html } = await request.json();
+    if (!to || !subject || !html) {
+      return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: getCORSHeaders(env, request) });
+    }
+
+    const result = await sendEmailViaApi(env, { to, subject, html });
+    return new Response(JSON.stringify(result), { status: 200, headers: getCORSHeaders(env, request) });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: getCORSHeaders(env, request) });
+  }
+}
+
+// Router
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (path.startsWith('/api/categories')) {
+      return handleCategories(request, env);
+    }
+    if (path.startsWith('/api/products')) {
+      return handleProducts(request, env);
+    }
+    if (path.startsWith('/api/orders')) {
+      return handleOrders(request, env);
+    }
+    if (path.startsWith('/api/auth/otp/request')) {
+      return handleAuthRequestOTP(request, env);
+    }
+    if (path.startsWith('/api/auth/otp/verify')) {
+      return handleAuthVerifyOTP(request, env);
+    }
+    if (path.startsWith('/api/webhooks/cashfree')) {
+      return handleCashfreeWebhook(request, env);
+    }
+    if (path.startsWith('/api/send-email')) {
+      return handleSendEmail(request, env);
+    }
+    if (path.startsWith('/api/account/addresses')) {
+      return handleCustomerAddresses(request, env);
+    }
+
+    // Default response for unknown routes
+    return new Response(
+      JSON.stringify({ error: 'Route not found' }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  },
+
+  // Scheduled handler for cron jobs (runs every hour)
+  async scheduled(event, env, ctx) {
+    console.log('[Cron] Running scheduled task at', new Date().toISOString());
+
+    try {
+      const supabase = createSupabaseAdmin(env);
+
+      // 1. Check if cart abandonment is enabled
+      const { data: settings } = await supabase
+        .from('site_settings')
+        .select('cart_abandonment_enabled, cart_abandonment_delay_hours, cart_abandonment_whatsapp_template')
+        .maybeSingle();
+
+      if (!settings?.cart_abandonment_enabled) {
+        console.log('[Cron] Cart abandonment disabled');
+        return;
+      }
+
+      const delayHours = settings.cart_abandonment_delay_hours || 2;
+      const templateName = settings.cart_abandonment_whatsapp_template || 'cart_reminder';
+
+      // 2. Get abandoned carts older than delay hours with phone numbers
+      const cutoffTime = new Date(Date.now() - (delayHours * 60 * 60 * 1000)).toISOString();
+
+      const { data: abandonedCarts, error: fetchError } = await supabase
+        .from('abandoned_carts')
+        .select('*')
+        .eq('recovery_status', 'pending')
+        .not('customer_phone', 'is', null)
+        .lt('created_at', cutoffTime)
+        .limit(50); // Process max 50 per hour
+
+      if (fetchError) {
+        console.error('[Cron] Error fetching abandoned carts:', fetchError);
+        return;
+      }
+
+      if (!abandonedCarts || abandonedCarts.length === 0) {
+        console.log('[Cron] No abandoned carts to process');
+        return;
+      }
+
+      console.log(`[Cron] Found ${abandonedCarts.length} abandoned carts to remind`);
+
+      // 3. Send WhatsApp reminders
+      for (const cart of abandonedCarts) {
+        try {
+          // Format phone number for WhatsApp
+          let phone = cart.customer_phone.replace(/\D/g, '');
+          if (!phone.startsWith('91') && phone.length === 10) {
+            phone = '91' + phone;
+          }
+
+          // Get first item name for personalization
+          const items = cart.cart_items || [];
+          const firstItemName = items[0]?.name || 'your items';
+          const itemCount = items.length;
+          const totalAmount = cart.total_amount || 0;
+          const cartUrl = `${env.PUBLIC_URL || 'https://business.woody.co.in'}/cart`;
+
+          // Create personalized message
+          const customerName = cart.customer_name || 'Dear Customer';
+          const messageBody = `Hi ${customerName}! 🛒
+
+You left ${itemCount} item(s) in your cart worth ₹${totalAmount}.
+
+🎁 *${firstItemName}* and more are waiting for you!
+
+Complete your order now: ${cartUrl}
+
+Need help? Reply to this message!`;
+
+          // Send WhatsApp text message (not template)
+          const whatsappResponse = await sendWhatsAppTextMessage(env, {
+            to: phone,
+            body: messageBody,
+            previewUrl: true
+          });
+
+          // Update cart status
+          await supabase
+            .from('abandoned_carts')
+            .update({
+              recovery_status: 'reminder_sent',
+              reminder_sent_at: new Date().toISOString()
+            })
+            .eq('id', cart.id);
+
+          console.log(`[Cron] Sent reminder to ${phone}`);
+
+        } catch (sendError) {
+          console.error(`[Cron] Failed to send reminder for cart ${cart.id}:`, sendError);
+        }
+      }
+
+      // 4. Cleanup old carts (expired after 15 days)
+      const fifteenDaysAgo = new Date(Date.now() - (15 * 24 * 60 * 60 * 1000)).toISOString();
+      await supabase
+        .from('abandoned_carts')
+        .update({ recovery_status: 'expired' })
+        .eq('recovery_status', 'pending')
+        .lt('created_at', fifteenDaysAgo);
+
+      // Delete carts older than 30 days
+      const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+      await supabase
+        .from('abandoned_carts')
+        .delete()
+        .lt('created_at', thirtyDaysAgo);
+
+      console.log('[Cron] Completed cart abandonment processing');
+
+    } catch (error) {
+      console.error('[Cron] Error in scheduled task:', error);
+    }
+  },
+};
+
+// Address Book Handler
+async function handleCustomerAddresses(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  const supabase = createSupabaseAdmin(env);
+
+  try {
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      const phone = url.searchParams.get('phone');
+
+      if (!phone) {
+        return new Response(JSON.stringify({ error: 'Phone number required' }), { status: 400, headers: getCORSHeaders(env, request) });
+      }
+
+      const { data, error } = await supabase
+        .from('customers')
+        .select('address_json')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ addresses: data?.address_json || [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) }
+      });
+    }
+
+    if (request.method === 'POST') {
+      const { phone, addresses } = await request.json();
+
+      if (!phone || !Array.isArray(addresses)) {
+        return new Response(JSON.stringify({ error: 'Phone and addresses array required' }), { status: 400, headers: getCORSHeaders(env, request) });
+      }
+
+      const { error } = await supabase
+        .from('customers')
+        .update({
+          address_json: addresses,
+          updated_at: new Date().toISOString()
+        })
+        .eq('phone', phone);
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...getCORSHeaders(env, request) }
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: getCORSHeaders(env, request) });
+
+  } catch (error) {
+    console.error('Address API Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: getCORSHeaders(env, request) });
+  }
+}
+
+async function handleCategories(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      // Transform snake_case to camelCase for frontend compatibility
+      const transformedData = (data || []).map(cat => ({
+        ...cat,
+        imageUrl: cat.image_url || null,
+        imageHint: cat.image_hint || '',
+        linkUrl: cat.link_url || null,
+        is_featured: cat.is_featured || false,
+        featured_order: cat.featured_order || 0,
+        createdAt: cat.created_at,
+        updatedAt: cat.updated_at,
+      }));
+
+      return new Response(JSON.stringify(transformedData), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        {
+          status: 405,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    let payload = {};
+    try {
+      const json = await request.json();
+      payload = json || {};
+    } catch {
+      payload = { action: 'list' };
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      payload = { action: 'list' };
+    }
+
+    if (payload.action === 'list' || payload.action === undefined) {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'create') {
+      const { data, error } = await supabase
+        .from('categories')
+        .insert(payload.data)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || null), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid action' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+    });
+  }
+}
+
+// Route handler for create-order
+async function handleCreateOrder(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const input = await request.json();
+
+    // Input validation
+    validateOrderInput(input);
+
+    const { orderId, customerName, customerPhone, customerEmail, returnUrl, items, couponCode, extraNote, customerAddress } = input;
+
+    const envType = env.CASHFREE_ENV?.trim().toUpperCase() || 'SANDBOX';
+    const cashfreeConfig = {
+      env: envType,
+      baseUrl: envType === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg',
+      appId: env.CASHFREE_APP_ID?.trim(),
+      secretKey: env.CASHFREE_SECRET_KEY?.trim(),
+    };
+
+    if (!cashfreeConfig.appId || !cashfreeConfig.secretKey) {
+      throw new Error('Cashfree credentials missing in environment variables.');
+    }
+
+    const supabaseAdmin = createSupabaseAdmin(env);
+
+    // IDEMPOTENCY CHECK: Check if order already exists
+    const { data: existingOrder } = await supabaseAdmin
+      .from('orders')
+      .select('id, status, payment_status, total_amount')
+      .eq('external_order_id', String(orderId))
+      .single();
+
+    if (existingOrder) {
+      return new Response(JSON.stringify({
+        order_id: existingOrder.external_order_id,
+        payment_session_id: null,
+        env: envType,
+        existing: true,
+        status: existingOrder.status,
+        payment_status: existingOrder.payment_status,
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+        status: 200,
+      });
+    }
+
+    // SECURITY: Calculate total amount from database instead of trusting client
+    let calculatedTotalAmount = 0;
+    let validatedItems = [];
+
+    if (items && items.length > 0) {
+      const productIds = items.map((item) => item.id).filter(Boolean);
+
+      if (productIds.length > 0) {
+        const { data: products, error: productError } = await supabaseAdmin
+          .from('products')
+          .select('id, sale_price, regular_price, name')
+          .in('id', productIds);
+
+        if (productError) {
+          throw new Error('Failed to fetch product prices');
+        }
+
+        const productMap = new Map(
+          products?.map((product) => [product.id, product]) || []
+        );
+
+        validatedItems = items.map((item) => {
+          const product = productMap.get(item.id);
+          if (!product) {
+            throw new Error(`Product with ID ${item.id} not found`);
+          }
+
+          // Use sale_price if available, otherwise regular_price
+          const price = product.sale_price || product.regular_price || 0;
+          const quantity = Number(item.quantity) || 1;
+          const unitPrice = Number(price);
+          const totalPrice = unitPrice * quantity;
+
+          calculatedTotalAmount += totalPrice;
+
+          return {
+            product_id: item.id,
+            product_name: product.name,
+            sku: item.id,
+            quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            image_url: item.imageUrl, // Optional: still trust client for image URL as it's display only, or fetch?
+            image_hint: item.imageHint,
+          };
+        });
+      }
+    }
+
+    // Ensure we have a valid amount
+    if (calculatedTotalAmount <= 0) {
+      // Fallback? No, strict mode.
+      // If "amount" was passed for custom orders (advance payment?), we might need logic.
+      // But for now, assume rigorous product-based checkout.
+      // Exception: "Advance Payment" logic often uses arbitrary amount.
+      // If specific advance logic is needed, we'd handle it here.
+      // For now, enforcing product price sum.
+      // If no items, checks fail.
+      if (!items || items.length === 0) throw new Error("No items in order");
+    }
+
+    // SECURITY: Server-side coupon validation and discount calculation
+    let couponDiscount = 0;
+    let validatedCouponCode = null;
+
+    if (couponCode) {
+      const code = String(couponCode).trim().toUpperCase();
+      const { data: coupon, error: couponError } = await supabaseAdmin
+        .from('coupons')
+        .select('*')
+        .eq('code', code)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (!couponError && coupon) {
+        // Double check expiry if field exists (schema dependent, usually active is enough or expiry date)
+        // Assume 'active' handles it for now as per schema
+        validatedCouponCode = coupon.code;
+        if (coupon.type === 'percent') {
+          couponDiscount = (calculatedTotalAmount * (Number(coupon.value) / 100));
+        } else if (coupon.type === 'flat') {
+          couponDiscount = Number(coupon.value);
+        }
+        // Cap discount at total
+        couponDiscount = Math.min(calculatedTotalAmount, couponDiscount);
+      }
+      // If coupon is invalid, we silently ignore it (don't fail the order)
+    }
+
+    const amountAfterDiscount = Math.max(1, calculatedTotalAmount - couponDiscount);
+
+    // 1. Save Order to Supabase in 'PENDING' state
+    const { data: orderData, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert({
+        external_order_id: String(orderId),
+        customer_name: customerName || 'Customer',
+        customer_phone: String(customerPhone),
+        // customer_email: customerEmail,
+        status: 'PENDING',
+        payment_status: 'PENDING',
+        // subtotal_amount: calculatedTotalAmount,
+        total_amount: amountAfterDiscount,
+        // coupon_code: validatedCouponCode,
+        // discount_amount: couponDiscount,
+        customer_address: customerAddress || 'Address not provided'
+      })
+      .select()
+      .single();
+
+    if (orderError) throw orderError;
+
+    // 2. Create order items using validated data
+    if (validatedItems.length > 0) {
+      const orderItems = validatedItems.map((item) => ({
+        order_id: orderData.id,
+        ...item,
+      }));
+      const { error: itemsError } = await supabaseAdmin.from('order_items').insert(orderItems);
+      if (itemsError) throw itemsError;
+    }
+
+    // 3. Create Cashfree order with discounted amount
+    const requestBody = {
+      order_id: orderId,
+      order_amount: amountAfterDiscount,
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: String(customerPhone).replace(/[^a-zA-Z0-9_-]/g, ''),
+        customer_name: customerName,
+        customer_email: customerEmail || `customer-${Date.now()}@example.com`,
+        customer_phone: String(customerPhone),
+      },
+      order_meta: {
+        return_url: `${returnUrl}?order_id=${orderId}`,
+        notify_url: `${new URL(request.url).origin}/cashfree-webhook`,
+      },
+      order_note: extraNote || '',
+    };
+
+    const cashfreeResponse = await fetch(`${cashfreeConfig.baseUrl}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': '2023-08-01',
+        'x-client-id': cashfreeConfig.appId,
+        'x-client-secret': cashfreeConfig.secretKey,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const cashfreeData = await cashfreeResponse.json();
+
+    if (!cashfreeResponse.ok) {
+      throw new Error(cashfreeData.message || 'Cashfree order creation failed');
+    }
+
+    // 4. Track coupon redemption (Moved to Webhook or here? Webhook is safer for actual usage, but here reserves it)
+    // Actually, usually on payment success. But let's log it if needed.
+    // The previous implementation added it here. We'll stick to that or rely on order table `coupon_code` col.
+    // Explicit table tracking:
+    if (validatedCouponCode && couponDiscount > 0) {
+      await supabaseAdmin.from('coupon_redemptions').insert({
+        order_id: orderData.id,
+        coupon_code: validatedCouponCode,
+        discount_amount: couponDiscount
+      });
+    }
+
+    return new Response(JSON.stringify({
+      order_id: cashfreeData.order_id,
+      payment_session_id: cashfreeData.payment_session_id,
+      env: envType,
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+      status: 200,
+    });
+
+  } catch (error) {
+    console.error('Create Order Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+      status: 500,
+    });
+  }
+}
+
+// Route handler for create-payment
+async function handleCreatePayment(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const { orderId, amount, customerName, customerPhone, customerEmail, returnUrl, items, couponCode } = await request.json();
+
+    const envType = env.CASHFREE_ENV?.trim().toUpperCase() || 'SANDBOX';
+    const cashfreeConfig = {
+      env: envType,
+      baseUrl: envType === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg',
+      appId: env.CASHFREE_APP_ID?.trim(),
+      secretKey: env.CASHFREE_SECRET_KEY?.trim(),
+    };
+
+    if (!cashfreeConfig.appId || !cashfreeConfig.secretKey) {
+      throw new Error('Cashfree credentials missing in environment variables.');
+    }
+    if (!orderId || !amount || !customerPhone) {
+      throw new Error('Missing required fields: orderId, amount, and customerPhone are required.');
+    }
+
+    const supabaseAdmin = createSupabaseAdmin(env);
+
+    // IDEMPOTENCY CHECK: Check if order already exists
+    const { data: existingOrder } = await supabaseAdmin
+      .from('orders')
+      .select('id, status, payment_status, total_amount')
+      .eq('external_order_id', String(orderId))
+      .single();
+
+    if (existingOrder) {
+      return new Response(JSON.stringify({
+        order_id: existingOrder.external_order_id,
+        payment_session_id: null,
+        env: envType,
+        existing: true,
+        status: existingOrder.status,
+        payment_status: existingOrder.payment_status,
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+        status: 200,
+      });
+    }
+
+    // SECURITY: Calculate total amount from database instead of trusting client
+    let calculatedTotalAmount = 0;
+    let validatedItems = [];
+
+    if (items && items.length > 0) {
+      const productIds = items.map((item) => item.id).filter(Boolean);
+
+      if (productIds.length > 0) {
+        const { data: products, error: productError } = await supabaseAdmin
+          .from('products')
+          .select('id, price, name')
+          .in('id', productIds);
+
+        if (productError) {
+          throw new Error('Failed to fetch product prices');
+        }
+
+        const productMap = new Map(
+          products?.map((product) => [product.id, product]) || []
+        );
+
+        validatedItems = items.map((item) => {
+          const product = productMap.get(item.id);
+          if (!product) {
+            throw new Error(`Product with ID ${item.id} not found`);
+          }
+
+          const quantity = Number(item.quantity) || 1;
+          const unitPrice = Number(product.price);
+          const totalPrice = unitPrice * quantity;
+
+          calculatedTotalAmount += totalPrice;
+
+          return {
+            product_id: item.id,
+            product_name: product.name,
+            sku: item.id,
+            quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            image_url: item.imageUrl,
+            image_hint: item.imageHint,
+          };
+        });
+      }
+    }
+
+    const finalAmount = calculatedTotalAmount > 0 ? calculatedTotalAmount : Number(amount);
+    if (finalAmount <= 0) {
+      throw new Error('Invalid order amount');
+    }
+
+    // SECURITY: Server-side coupon validation and discount calculation
+    let couponDiscount = 0;
+    let validatedCouponCode = null;
+
+    if (couponCode) {
+      const code = String(couponCode).trim().toUpperCase();
+      const { data: coupon, error: couponError } = await supabaseAdmin
+        .from('coupons')
+        .select('*')
+        .eq('code', code)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (!couponError && coupon) {
+        validatedCouponCode = coupon.code;
+        if (coupon.type === 'percent') {
+          couponDiscount = Math.min(finalAmount, finalAmount * (Number(coupon.value) / 100));
+        } else if (coupon.type === 'flat') {
+          couponDiscount = Math.min(finalAmount, Number(coupon.value));
+        }
+      }
+    }
+
+    const amountAfterDiscount = Math.max(1, finalAmount - couponDiscount);
+
+    // 1. Save Order to Supabase in 'PENDING' state
+    const { data: orderData, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert({
+        external_order_id: String(orderId),
+        customer_name: customerName || 'Customer',
+        customer_phone: String(customerPhone),
+        status: 'PENDING',
+        payment_status: 'PENDING',
+        subtotal_amount: finalAmount,
+        total_amount: amountAfterDiscount,
+      })
+      .select()
+      .single();
+
+    if (orderError) throw orderError;
+
+    // 2. Create order items using validated data
+    if (validatedItems.length > 0) {
+      const orderItems = validatedItems.map((item) => ({
+        order_id: orderData.id,
+        ...item,
+      }));
+      const { error: itemsError } = await supabaseAdmin.from('order_items').insert(orderItems);
+      if (itemsError) throw itemsError;
+    }
+
+    // 3. Create Cashfree Order with discounted amount
+    const requestBody = {
+      order_id: String(orderId),
+      order_amount: amountAfterDiscount,
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: String(customerPhone).replace(/[^a-zA-Z0-9_-]/g, ''),
+        customer_phone: String(customerPhone),
+        customer_name: customerName || 'Customer',
+        customer_email: customerEmail || `customer-${Date.now()}@example.com`,
+      },
+      order_meta: {
+        return_url: `${returnUrl}?order_id={order_id}`,
+      },
+    };
+
+    const cashfreeResponse = await fetch(`${cashfreeConfig.baseUrl}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': '2023-08-01',
+        'x-client-id': cashfreeConfig.appId,
+        'x-client-secret': cashfreeConfig.secretKey,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const cashfreeData = await cashfreeResponse.json();
+
+    if (!cashfreeResponse.ok) {
+      throw new Error(cashfreeData.message || 'Cashfree order creation failed');
+    }
+
+    // 4. Track coupon usage if coupon was applied and valid
+    if (validatedCouponCode && couponDiscount > 0) {
+      try {
+        await supabaseAdmin
+          .from('coupon_redemptions')
+          .insert({
+            order_id: orderData.id,
+            coupon_code: validatedCouponCode,
+            discount_amount: couponDiscount,
+          });
+      } catch (couponError) {
+        console.error('Failed to track coupon redemption:', couponError);
+      }
+    }
+
+    return new Response(JSON.stringify({
+      order_id: cashfreeData.order_id,
+      payment_session_id: cashfreeData.payment_session_id,
+      env: envType,
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+      status: 200,
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+      status: 500,
+    });
+  }
+}
+
+// Route handler for orders-admin
+async function handleOrdersAdmin(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    if (payload.action === 'list') {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'getById') {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('id', payload.orderId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || null), {
+        status: data ? 200 : 404,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'getByExternalId') {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('external_order_id', payload.externalOrderId)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return new Response(
+            JSON.stringify({ error: 'Order not found' }),
+            {
+              status: 404,
+              headers: {
+                'Content-Type': 'application/json',
+                ...getCORSHeaders(env, request),
+              },
+            },
+          );
+        }
+        throw error;
+      }
+
+      return new Response(JSON.stringify(data || null), {
+        status: data ? 200 : 404,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'history') {
+      const { data, error } = await supabase
+        .from('order_status_history')
+        .select('*')
+        .eq('order_id', payload.orderId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'cancel') {
+      const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', payload.orderId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (!order) {
+        return new Response(
+          JSON.stringify({ error: 'Order not found' }),
+          {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          },
+        );
+      }
+
+      const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({
+          status: 'CANCELLED',
+          admin_notes: payload.adminNote ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', payload.orderId)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      await supabase.from('order_status_history').insert({
+        order_id: payload.orderId,
+        old_status: order.status,
+        new_status: 'CANCELLED',
+        reason: payload.cancelReason ?? null,
+        admin_note: payload.adminNote ?? null,
+        created_by: 'admin',
+        created_at: new Date().toISOString(),
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, order: updatedOrder }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        },
+      );
+    }
+
+    if (payload.action === 'return') {
+      const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', payload.orderId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (!order) {
+        return new Response(
+          JSON.stringify({ error: 'Order not found' }),
+          {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          },
+        );
+      }
+
+      const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({
+          status: 'RETURNED',
+          return_reason: payload.returnReason ?? null,
+          admin_notes: payload.adminNote ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', payload.orderId)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      await supabase.from('order_status_history').insert({
+        order_id: payload.orderId,
+        old_status: order.status,
+        new_status: 'RETURNED',
+        reason: payload.returnReason ?? null,
+        admin_note: payload.adminNote ?? null,
+        created_by: 'admin',
+        created_at: new Date().toISOString(),
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, order: updatedOrder }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        },
+      );
+    }
+
+    if (payload.action === 'refund') {
+      const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', payload.orderId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (!order) {
+        return new Response(
+          JSON.stringify({ error: 'Order not found' }),
+          {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          },
+        );
+      }
+
+      const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({
+          status: 'REFUNDED',
+          refund_amount: payload.refundAmount,
+          refund_reason: payload.refundReason ?? null,
+          admin_notes: payload.adminNote ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', payload.orderId)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      await supabase.from('order_status_history').insert({
+        order_id: payload.orderId,
+        old_status: order.status,
+        new_status: 'REFUNDED',
+        reason: payload.refundReason ?? null,
+        admin_note: payload.adminNote ?? null,
+        created_by: 'admin',
+        created_at: new Date().toISOString(),
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, order: updatedOrder }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        },
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid action' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(),
+      },
+    });
+  }
+}
+
+
+
+
+
+// Route handler for products-admin
+async function handleProductsAdmin(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    if (payload.action === 'list') {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'create') {
+      // Check for existing order to prevent duplicates
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('external_order_id', payload.data.external_order_id)
+        .single();
+
+      if (existingOrder) {
+        return new Response(
+          JSON.stringify({ error: 'Order already exists', order: existingOrder }),
+          {
+            status: 409,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert(payload.data)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || null), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid action' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for coupons-admin
+async function handleCouponsAdmin(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    if (!payload || typeof payload !== 'object') {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request payload' }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (!payload.action || payload.action === 'list') {
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .order('code');
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'create') {
+      const input = payload.data || {};
+      const code =
+        typeof input.code === 'string'
+          ? input.code.trim().toUpperCase()
+          : '';
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code is required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { data: existing, error: existingError } = await supabase
+        .from('coupons')
+        .select('code')
+        .eq('code', code)
+        .maybeSingle();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        throw existingError;
+      }
+
+      if (existing) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code already exists.' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const insertPayload = {
+        code,
+        type: input.type,
+        value: input.value,
+        active: input.active !== undefined ? Boolean(input.active) : true,
+        show_on_offers_page:
+          input.show_on_offers_page !== undefined
+            ? Boolean(input.show_on_offers_page)
+            : false,
+      };
+
+      const { data, error } = await supabase
+        .from('coupons')
+        .insert(insertPayload)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, coupon: data || null }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (payload.action === 'update') {
+      const input = payload.data || {};
+      const originalCode =
+        typeof input.originalCode === 'string'
+          ? input.originalCode.trim().toUpperCase()
+          : '';
+      const newCode =
+        typeof input.code === 'string'
+          ? input.code.trim().toUpperCase()
+          : '';
+
+      if (!originalCode || !newCode) {
+        return new Response(
+          JSON.stringify({ error: 'Original and new coupon codes are required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      if (originalCode !== newCode) {
+        const { data: exists, error: existsError } = await supabase
+          .from('coupons')
+          .select('code')
+          .eq('code', newCode)
+          .maybeSingle();
+
+        if (existsError && existsError.code !== 'PGRST116') {
+          throw existsError;
+        }
+
+        if (exists) {
+          return new Response(
+            JSON.stringify({
+              error: 'The new coupon code already exists.',
+            }),
+            {
+              status: 400,
+              headers: {
+                'Content-Type': 'application/json',
+                ...getCORSHeaders(env, request),
+              },
+            }
+          );
+        }
+      }
+
+      const updatePayload = {
+        code: newCode,
+        type: input.type,
+        value: input.value,
+        show_on_offers_page:
+          input.show_on_offers_page !== undefined
+            ? Boolean(input.show_on_offers_page)
+            : false,
+      };
+
+      const { data, error } = await supabase
+        .from('coupons')
+        .update(updatePayload)
+        .eq('code', originalCode)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, coupon: data || null }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (payload.action === 'delete') {
+      const code =
+        typeof payload.code === 'string'
+          ? payload.code.trim().toUpperCase()
+          : '';
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code is required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { error } = await supabase
+        .from('coupons')
+        .delete()
+        .eq('code', code);
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'toggle-status') {
+      const code =
+        typeof payload.code === 'string'
+          ? payload.code.trim().toUpperCase()
+          : '';
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code is required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { data: coupon, error: fetchError } = await supabase
+        .from('coupons')
+        .select('active')
+        .eq('code', code)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!coupon) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon not found' }),
+          {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const current = Boolean(coupon.active);
+
+      const { error } = await supabase
+        .from('coupons')
+        .update({ active: !current })
+        .eq('code', code);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, active: !current }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (payload.action === 'toggle-visibility') {
+      const code =
+        typeof payload.code === 'string'
+          ? payload.code.trim().toUpperCase()
+          : '';
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code is required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { data: coupon, error: fetchError } = await supabase
+        .from('coupons')
+        .select('show_on_offers_page')
+        .eq('code', code)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!coupon) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon not found' }),
+          {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const current = Boolean(coupon.show_on_offers_page);
+
+      const { error } = await supabase
+        .from('coupons')
+        .update({ show_on_offers_page: !current })
+        .eq('code', code);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          show_on_offers_page: !current,
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (payload.action === 'validate') {
+      const code =
+        typeof payload.code === 'string'
+          ? payload.code.trim().toUpperCase()
+          : '';
+
+      if (!code) {
+        return new Response(
+          JSON.stringify({ error: 'Coupon code is required' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      const { data: coupon, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', code)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (error || !coupon) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid coupon' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      // SECURITY: Calculate actual subtotal from cart items, not trust client
+      const { items } = payload;
+
+      if (!items || items.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Cart items required for validation' }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          }
+        );
+      }
+
+      // Fetch real prices from database
+      const productIds = items.map(item => item.product_id);
+      const { data: products, error: productsError } = await supabase
+        .from('products')
+        .select('id, regular_price, sale_price')
+        .in('id', productIds);
+
+      if (productsError) throw productsError;
+
+      // Calculate actual subtotal
+      let actualSubtotal = 0;
+      items.forEach(item => {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          const price = product.sale_price || product.regular_price || 0;
+          actualSubtotal += price * (item.quantity || 1);
+        }
+      });
+
+      // Apply coupon to actual subtotal
+      let discountAmount = 0;
+      if (coupon.type === 'percent') {
+        discountAmount = Math.min(
+          actualSubtotal,
+          actualSubtotal * (Number(coupon.value) / 100)
+        );
+      } else if (coupon.type === 'flat') {
+        discountAmount = Math.min(actualSubtotal, Number(coupon.value));
+      }
+
+      return new Response(
+        JSON.stringify({
+          code: coupon.code,
+          discountAmount,
+          subtotal: actualSubtotal,
+          finalAmount: actualSubtotal - discountAmount,
+          message:
+            coupon.type === 'percent'
+              ? `Applied ${coupon.value}% OFF`
+              : `₹${coupon.value} OFF`,
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid action' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for lead-analytics
+async function handleLeadAnalytics(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'GET' && request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    const { data, error } = await supabase
+      .from('lead_analytics')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(5000);
+
+    if (error) throw error;
+
+    return new Response(JSON.stringify({ data: data || [] }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for order-status
+async function handleOrderStatus(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const url = new URL(request.url);
+    let orderId = url.searchParams.get('order_id') || url.searchParams.get('orderId');
+    let customerPhone = url.searchParams.get('phone') || url.searchParams.get('customer_phone');
+
+    if (request.method === 'POST') {
+      const body = await request.json();
+      orderId = (body && (body.orderId || body.order_id)) || null;
+      customerPhone = body.phone || body.customer_phone || null;
+    }
+
+    if (!orderId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing query param: order_id' }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        },
+      );
+    }
+
+    const supabase = createSupabaseAdmin(env);
+
+    // 1. Fetch order from database (always)
+    const { data: dbOrder, error: dbError } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        order_items (
+          *,
+          customer_uploaded_images
+        )
+      `)
+      .eq('external_order_id', orderId)
+      .maybeSingle();
+
+    // 2. If phone provided, verify it matches order (for guest upload viewing)
+    if (customerPhone && dbOrder) {
+      const normalizedInputPhone = String(customerPhone).replace(/\D/g, '').slice(-10);
+      const normalizedOrderPhone = String(dbOrder.customer_phone).replace(/\D/g, '').slice(-10);
+
+      if (normalizedInputPhone !== normalizedOrderPhone) {
+        return new Response(
+          JSON.stringify({ error: 'Phone number does not match order' }),
+          {
+            status: 403,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            },
+          },
+        );
+      }
+    }
+
+    // 3. Fetch payment status from Cashfree
+    const envType = env.CASHFREE_ENV?.trim().toUpperCase() || 'SANDBOX';
+    const baseUrl = envType === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+    const appId = env.CASHFREE_APP_ID?.trim();
+    const secretKey = env.CASHFREE_SECRET_KEY?.trim();
+
+    let cashfreeData = null;
+    if (appId && secretKey) {
+      try {
+        const response = await fetch(`${baseUrl}/orders/${orderId}`, {
+          method: 'GET',
+          headers: {
+            'x-api-version': '2023-08-01',
+            'x-client-id': appId,
+            'x-client-secret': secretKey,
+          },
+        });
+        if (response.ok) {
+          cashfreeData = await response.json();
+        }
+      } catch (e) {
+        console.error('Cashfree fetch error:', e);
+      }
+    }
+
+    // 4. Build response (hide sensitive data unless phone verified)
+    const includeUploads = !!customerPhone; // Only include uploads if phone verified
+
+    const result = {
+      order_id: orderId,
+      order_status: cashfreeData?.order_status || dbOrder?.status || 'UNKNOWN',
+      payment_status: dbOrder?.payment_status || 'PENDING',
+      payment_session_id: cashfreeData?.payment_session_id || null,
+      payments_url: cashfreeData?.payments?.url || null,
+
+      // DB order details
+      customer_name: dbOrder?.customer_name,
+      total_amount: dbOrder?.total_amount,
+      created_at: dbOrder?.created_at,
+
+      // Items (include uploads only if phone verified)
+      items: includeUploads ? (dbOrder?.order_items || []) : (dbOrder?.order_items || []).map(item => ({
+        ...item,
+        customer_uploaded_images: undefined // Hide uploads without phone
+      })),
+
+      // Status display message
+      status_message: getOrderStatusMessage(cashfreeData?.order_status || dbOrder?.status),
+    };
+
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unknown error';
+
+    return new Response(
+      JSON.stringify({
+        error: `Failed to fetch order status: ${message}`,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  }
+}
+
+// Helper function for order status messages
+function getOrderStatusMessage(status) {
+  const messages = {
+    'PENDING': 'Payment pending. Please complete your payment.',
+    'ACTIVE': 'Payment pending. Please complete your payment.',
+    'PAID': 'Payment successful! Your order has been confirmed.',
+    'CONFIRMED': 'Payment successful! Your order has been confirmed.',
+    'PROCESSING': 'Your order is being processed.',
+    'SHIPPED': 'Your order has been shipped!',
+    'DELIVERED': 'Your order has been delivered.',
+    'CANCELLED': 'This order has been cancelled.',
+    'RETURNED': 'Return has been processed.',
+    'REFUNDED': 'Refund has been processed.',
+  };
+  return messages[status] || 'Order status: ' + (status || 'Unknown');
+}
+
+// Route handler for reviews
+async function handleReviews(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+    const url = new URL(request.url);
+    const productId = url.searchParams.get('product_id');
+
+    if (request.method === 'GET') {
+      let query = supabase.from('reviews').select('*');
+
+      if (productId) {
+        query = query.eq('product_id', productId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const reviewData = await request.json();
+
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert({
+          product_id: reviewData.product_id,
+          rating: reviewData.rating,
+          comment: reviewData.comment,
+          customer_name: reviewData.customer_name,
+          is_approved: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'PUT') {
+      const reviewData = await request.json();
+      const { reviewId, isApproved } = reviewData;
+
+      const { data, error } = await supabase
+        .from('reviews')
+        .update({
+          is_approved: isApproved,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reviewId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for site images
+async function handleSiteImages(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('site_images')
+        .select('*')
+        .order('id');
+
+      if (error) throw error;
+
+      // Transform snake_case to camelCase for frontend compatibility
+      const transformedData = (data || []).map(img => ({
+        id: img.id,
+        key: img.key,
+        name: img.name,
+        imageUrl: img.image_url || null,
+        imageHint: img.image_hint || '',
+        linkUrl: img.link_url || null,
+        type: img.type || 'image',
+        createdAt: img.created_at,
+        updatedAt: img.updated_at,
+      }));
+
+      return new Response(JSON.stringify(transformedData), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const imageData = await request.json();
+
+      const { data, error } = await supabase
+        .from('site_images')
+        .update({
+          image_url: imageData.imageUrl,
+          image_hint: imageData.imageHint,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', imageData.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for sliding cards
+async function handleSlidingCards(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('sliding_cards')
+        .select('*')
+        .eq('active', true)
+        .order('order_num');
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const cardData = await request.json();
+
+      const { data, error } = await supabase
+        .from('sliding_cards')
+        .insert({
+          title: cardData.title,
+          description: cardData.description,
+          image_url: cardData.imageUrl,
+          image_hint: cardData.imageHint,
+          link_url: cardData.linkUrl,
+          order_num: cardData.orderNum || 0,
+          active: cardData.active !== false
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for blog posts
+async function handleBlogPosts(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .select('*')
+        .not('published_at', 'is', null)
+        .order('published_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const postData = await request.json();
+
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .insert({
+          slug: postData.slug,
+          title: postData.title,
+          author: postData.author,
+          content: postData.content,
+          image_url: postData.imageUrl,
+          image_key: postData.imageKey,
+          published_at: postData.publishedAt || null
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+async function handleSiteSettings(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    if (payload.action === 'get') {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('*')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || {}), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (payload.action === 'update') {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .upsert(payload.data, { onConflict: 'id' })
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || {}), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid action' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for products
+async function handleProducts(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .not('id', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform snake_case to camelCase for frontend compatibility
+      const transformedData = (data || []).map(product => ({
+        ...product,
+        imageUrl: product.image_url || null,
+        imageAlt: product.image_alt || product.name,
+        imageHint: product.image_hint || '',
+        regularPrice: product.regular_price || product.price || 0,
+        salePrice: product.sale_price || null,
+        shortDescription: product.short_description || '',
+        specificDescription: product.specific_description || '',
+        galleryImages: product.gallery_images || [],
+        reviewCount: product.review_count || 0,
+        createdAt: product.created_at,
+        updatedAt: product.updated_at,
+      }));
+
+      return new Response(JSON.stringify(transformedData), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const payload = await request.json();
+      const insertData = { ...payload.data };
+
+      if (
+        (insertData.price === undefined || insertData.price === null) &&
+        insertData.regular_price != null
+      ) {
+        insertData.price = insertData.regular_price;
+      }
+
+      const { data, error } = await supabase
+        .from('products')
+        .insert(insertData)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || null), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for subscriptions
+async function handleSubscriptions(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  try {
+    const supabase = createSupabaseAdmin(env);
+
+    if (request.method === 'GET') {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    if (request.method === 'POST') {
+      const payload = await request.json();
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .insert(payload.data)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify(data || null), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for send-whatsapp
+async function handleSendWhatsApp(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+
+    const to =
+      payload.to ||
+      payload.phone ||
+      payload.recipient ||
+      payload.data?.to ||
+      null;
+    const body =
+      payload.body ||
+      payload.message ||
+      payload.text ||
+      payload.data?.message ||
+      null;
+    const previewUrl =
+      typeof payload.previewUrl === 'boolean'
+        ? payload.previewUrl
+        : Boolean(payload.data?.previewUrl);
+
+    if (!to || !body) {
+      return new Response(
+        JSON.stringify({ error: 'Missing to or message/body field' }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    const result = await sendWhatsAppTextMessage(env, {
+      to: String(to),
+      body: String(body),
+      previewUrl,
+    });
+
+    return new Response(JSON.stringify({ success: true, result }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for shiprocket-webhook
+async function handleShiprocketWebhook(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    const possibleOrderId =
+      payload?.order_id ||
+      payload?.orderId ||
+      payload?.reference_number ||
+      payload?.order?.order_id ||
+      payload?.shipment?.order_id ||
+      null;
+
+    if (!possibleOrderId) {
+      return new Response(
+        JSON.stringify({
+          received: true,
+          warning: 'Missing order identifier in payload',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    const { data: existingOrder } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('external_order_id', String(possibleOrderId))
+      .maybeSingle();
+
+    const statusText =
+      payload?.current_status ||
+      payload?.status ||
+      payload?.shipment_status ||
+      'SHIPPING_UPDATE';
+    const awb =
+      payload?.awb_code || payload?.awb || payload?.shipment?.awb || null;
+    const courier =
+      payload?.courier_name ||
+      payload?.courier ||
+      payload?.shipment?.courier ||
+      null;
+
+    const noteParts = [];
+    noteParts.push(`Shiprocket: ${statusText}`);
+    if (awb) noteParts.push(`AWB: ${awb}`);
+    if (courier) noteParts.push(`Courier: ${courier}`);
+
+    if (existingOrder) {
+      const validClientKeys = [
+        env?.PUBLIC_CLIENT_KEY,
+        'nemaone-2026', // Fallback for development
+      ].filter(Boolean);
+
+      const combinedNote = [
+        existingOrder.admin_notes,
+        noteParts.join(' | '),
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      await supabase
+        .from('orders')
+        .update({
+          admin_notes: combinedNote,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingOrder.id);
+
+      await supabase.from('order_status_history').insert({
+        order_id: existingOrder.id,
+        old_status: existingOrder.status,
+        new_status: existingOrder.status,
+        reason: 'Shiprocket webhook',
+        admin_note: noteParts.join(' | '),
+        created_by: 'shiprocket',
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for payment-webhook
+async function handlePaymentWebhook(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    // Payment webhook processing logic
+    const { data, error } = await supabase
+      .from('payment_webhooks')
+      .insert({
+        webhook_data: payload,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return new Response(JSON.stringify({ success: true, data }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Route handler for whatsapp-send-template
+async function handleWhatsAppSendTemplate(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: getCORSHeaders(env, request) });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  }
+
+  try {
+    const payload = await request.json();
+    const supabase = createSupabaseAdmin(env);
+
+    // WhatsApp template sending logic
+    const { data, error } = await supabase
+      .from('whatsapp_templates')
+      .insert(payload.data)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return new Response(JSON.stringify(data || null), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Unexpected error';
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCORSHeaders(env, request),
+      },
+    });
+  }
+}
+
+// Rate limiting using Cloudflare KV
+async function checkRateLimit(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const hourKey = `ratelimit:${ip}:${new Date().getHours()}`;
+
+  const count = await env.KV?.get(hourKey);
+  const limit = 100; // 100 requests per hour per IP
+
+  if (count && parseInt(count) >= limit) {
+    return { allowed: false, remaining: 0, resetTime: (60 - new Date().getMinutes()) * 60 };
+  }
+
+  const newCount = count ? parseInt(count) + 1 : 1;
+  await env.KV?.put(hourKey, String(newCount), { expirationTtl: 3600 });
+
+  return { allowed: true, remaining: limit - newCount };
+}
+
+// Input validation helper
+function validateOrderInput(data) {
+  const errors = [];
+
+  if (!data.orderId) errors.push('orderId is required');
+  if (!data.amount || data.amount <= 0) errors.push('Invalid amount');
+  if (!data.customerPhone) errors.push('customerPhone is required');
+  if (!data.items || data.items.length === 0) errors.push('items are required');
+
+  if (errors.length > 0) {
+    throw new Error(errors.join(', '));
+  }
+}
+
+// Error logging helper
+function logError(context, error, request) {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    context,
+    error: error.message,
+    stack: error.stack,
+    request: {
+      method: request.method,
+      url: request.url,
+      ip: request.headers.get('CF-Connecting-IP'),
+      userAgent: request.headers.get('User-Agent')
+    }
+  }));
+}
+
+// Simple auth check - only for admin endpoints
+function checkAdminAuth(request, env) {
+  const apiKey = request.headers.get('X-API-Key');
+  const validApiKey = env?.API_KEY || env?.API_LOG_KEY;
+
+  if (!apiKey || !validApiKey || apiKey !== validApiKey) {
+    return { valid: false, error: 'Admin API key required' };
+  }
+
+  return { valid: true };
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (request.method === 'OPTIONS') {
+      return new Response('ok', { headers: getCORSHeaders(env, request) });
+    }
+
+    // Simple auth logic
+    // 1. Admin endpoints require API key
+    if (path.includes('-admin')) {
+      const auth = checkAdminAuth(request, env);
+      if (!auth.valid) {
+        return new Response(
+          JSON.stringify({ error: auth.error }),
+          {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            }
+          }
+        );
+      }
+    }
+
+    // 2. Rate limiting for non-GET requests
+    if (request.method !== 'GET') {
+      const rateLimit = await checkRateLimit(request, env);
+      if (!rateLimit.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'Rate limit exceeded',
+            resetTime: rateLimit.resetTime
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              ...getCORSHeaders(env, request),
+            }
+          }
+        );
+      }
+    }
+
+    if (path.startsWith('/__debug')) {
+      if (env?.ENVIRONMENT === 'production') {
+        return new Response(JSON.stringify({ error: 'Route not found' }), {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        });
+      }
+      return new Response(
+        JSON.stringify(
+          {
+            environment: env?.ENVIRONMENT,
+            envKeys: Object.keys(env || {}),
+            has: {
+              SUPABASE_URL: Boolean(env?.SUPABASE_URL),
+              SUPABASE_SERVICE_ROLE_KEY: Boolean(env?.SUPABASE_SERVICE_ROLE_KEY),
+              ALLOWED_ORIGIN: Boolean(env?.ALLOWED_ORIGIN),
+              PUBLIC_URL: Boolean(env?.PUBLIC_URL),
+              API_LOG_KEY: Boolean(env?.API_LOG_KEY),
+              API_KEY: Boolean(env?.API_KEY),
+              CF_ACCESS_CLIENT_ID: Boolean(env?.CF_ACCESS_CLIENT_ID),
+              CF_ACCESS_CLIENT_SECRET: Boolean(env?.CF_ACCESS_CLIENT_SECRET),
+            },
+            processEnvHas: {
+              SUPABASE_URL: Boolean(globalThis?.process?.env?.SUPABASE_URL),
+              SUPABASE_SERVICE_ROLE_KEY: Boolean(globalThis?.process?.env?.SUPABASE_SERVICE_ROLE_KEY),
+              ALLOWED_ORIGIN: Boolean(globalThis?.process?.env?.ALLOWED_ORIGIN),
+              PUBLIC_URL: Boolean(globalThis?.process?.env?.PUBLIC_URL),
+              API_LOG_KEY: Boolean(globalThis?.process?.env?.API_LOG_KEY),
+              API_KEY: Boolean(globalThis?.process?.env?.API_KEY),
+              CF_ACCESS_CLIENT_ID: Boolean(globalThis?.process?.env?.CF_ACCESS_CLIENT_ID),
+              CF_ACCESS_CLIENT_SECRET: Boolean(globalThis?.process?.env?.CF_ACCESS_CLIENT_SECRET),
+            },
+            request: {
+              origin: request.headers.get('Origin'),
+              host: request.headers.get('Host'),
+            },
+            cors: {
+              allowOrigin: getCORSHeaders(env, request)['Access-Control-Allow-Origin'],
+            },
+          },
+          null,
+          2
+        ),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCORSHeaders(env, request),
+          },
+        }
+      );
+    }
+
+    if (env?.ENVIRONMENT !== 'production') {
+      console.log('🔍 Request received:', {
+        method: request.method,
+        url: request.url,
+        path: path,
+        environment: env?.ENVIRONMENT,
+      });
+    }
+
+    // Route to appropriate handler
+    if (path.startsWith('/cashfree-webhook')) {
+      return handleCashfreeWebhook(request, env);
+    } else if (path.startsWith('/categories')) {
+      return handleCategories(request, env);
+    } else if (path.startsWith('/create-order')) {
+      return handleCreateOrder(request, env);
+    } else if (path.startsWith('/create-payment')) {
+      return handleCreatePayment(request, env);
+    } else if (path.startsWith('/orders-admin')) {
+      return handleOrdersAdmin(request, env);
+    } else if (path.startsWith('/products-admin')) {
+      return handleProductsAdmin(request, env);
+    } else if (path.startsWith('/coupons-admin')) {
+      return handleCouponsAdmin(request, env);
+    } else if (path.startsWith('/lead-analytics')) {
+      return handleLeadAnalytics(request, env);
+    } else if (path.startsWith('/order-status')) {
+      return handleOrderStatus(request, env);
+    } else if (path.startsWith('/site-settings-admin') || path.startsWith('/site-settings')) {
+      return handleSiteSettings(request, env);
+    } else if (path.startsWith('/products')) {
+      return handleProducts(request, env);
+    } else if (path.startsWith('/subscriptions')) {
+      return handleSubscriptions(request, env);
+    } else if (path.startsWith('/send-whatsapp')) {
+      return handleSendWhatsApp(request, env);
+    } else if (path.startsWith('/shiprocket-webhook')) {
+      return handleShiprocketWebhook(request, env);
+    } else if (path.startsWith('/payment-webhook')) {
+      return handlePaymentWebhook(request, env);
+    } else if (path.startsWith('/whatsapp-send-template')) {
+      return handleWhatsAppSendTemplate(request, env);
+    } else if (path.startsWith('/reviews')) {
+      return handleReviews(request, env);
+    } else if (path.startsWith('/site-images')) {
+      return handleSiteImages(request, env);
+    } else if (path.startsWith('/sliding-cards')) {
+      return handleSlidingCards(request, env);
+    } else if (path.startsWith('/customer/update-profile')) {
+      return handleCustomerUpdateProfile(request, env);
+    } else if (path.startsWith('/customer/update-address')) {
+      return handleCustomerUpdateAddress(request, env);
+    } else if (path.startsWith('/customer/get')) {
+      return handleGetCustomer(request, env);
+    }
+    if (path.startsWith('/auth/request-otp')) {
+      return handleAuthRequestOTP(request, env);
+    } else if (path.startsWith('/auth/verify-otp')) {
+      return handleAuthVerifyOTP(request, env);
+    }
+
+    // Default response for unknown routes
+    return new Response(
+      JSON.stringify({ error: 'Route not found' }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCORSHeaders(env, request),
+        },
+      }
+    );
+  },
+};
+
+// Helper function to send WhatsApp template (for cron job)
+async function sendWhatsAppTemplate(env, phone, templateName, variables) {
+  const accessToken = env.WHATSAPP_CLOUD_ACCESS_TOKEN;
+  const phoneNumberId = env.WHATSAPP_CLOUD_PHONE_NUMBER_ID;
+  const apiVersion = env.WHATSAPP_API_VERSION || 'v20.0';
+
+  if (!accessToken || !phoneNumberId) {
+    throw new Error('WhatsApp credentials not configured');
+  }
+
+  const bodyParams = Object.values(variables).map(value => ({
+    type: 'text',
+    text: String(value)
+  }));
+
+  const response = await fetch(
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: 'en' },
+          components: [{
+            type: 'body',
+            parameters: bodyParams
+          }]
+        }
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`WhatsApp API error: ${error}`);
+  }
+
+  return response.json();
+}

@@ -1,0 +1,392 @@
+[
+    {
+        "name": "unaccent",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "amcheck",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "postgres_fdw",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pageinspect",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "http",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "rum",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgrouting",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgtap",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgroonga_database",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_tle",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "dict_int",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "cube",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_visibility",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgcrypto",
+        "schema": "extensions",
+        "installed_version": "1.3"
+    },
+    {
+        "name": "file_fdw",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "dict_xsyn",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgroonga",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "moddatetime",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "citext",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_stat_statements",
+        "schema": "extensions",
+        "installed_version": "1.11"
+    },
+    {
+        "name": "pg_jsonschema",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "supabase_vault",
+        "schema": "vault",
+        "installed_version": "0.3.1"
+    },
+    {
+        "name": "pg_net",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_buffercache",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "postgis_tiger_geocoder",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgstattuple",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "earthdistance",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "btree_gist",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "seg",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "address_standardizer_data_us",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "xml2",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "postgis_topology",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgaudit",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "ltree",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgjwt",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "address_standardizer",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "plpgsql_check",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgrowlocks",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "fuzzystrmatch",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "bloom",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_repack",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_hashids",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "intarray",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "tcn",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_graphql",
+        "schema": "graphql",
+        "installed_version": "1.5.11"
+    },
+    {
+        "name": "pg_surgery",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "tsm_system_rows",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "index_advisor",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_walinspect",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "postgis_sfcgal",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_stat_monitor",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_trgm",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "sslinfo",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "vector",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_prewarm",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_freespacemap",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "isn",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "uuid-ossp",
+        "schema": "extensions",
+        "installed_version": "1.1"
+    },
+    {
+        "name": "intagg",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "btree_gin",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "wrappers",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "tsm_system_time",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgsodium",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "dblink",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "tablefunc",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "autoinc",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_partman",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pgmq",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "pg_cron",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "hypopg",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "plpgsql",
+        "schema": "pg_catalog",
+        "installed_version": "1.0"
+    },
+    {
+        "name": "postgis_raster",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "hstore",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "refint",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "lo",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "insert_username",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "postgis",
+        "schema": null,
+        "installed_version": null
+    },
+    {
+        "name": "wal2json",
+        "schema": null,
+        "installed_version": null
+    }
+]

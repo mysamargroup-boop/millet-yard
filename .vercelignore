@@ -1,0 +1,11 @@
+# Vercel ignore
+.next/
+node_modules/
+cloudflare-workers/
+scripts/
+data/
+scratch/
+docs/
+supabase/
+*.log
+.git/

@@ -1,0 +1,22 @@
+[
+    {
+        "version": "20260114103209",
+        "name": "remote_schema"
+    },
+    {
+        "version": "20260115000001",
+        "name": "update_subcategories"
+    },
+    {
+        "version": "20260115000002",
+        "name": "add_performance_indexes"
+    },
+    {
+        "version": "20260116000001",
+        "name": "add_sliding_cards"
+    },
+    {
+        "version": "20260116000002",
+        "name": "update_schema"
+    }
+]

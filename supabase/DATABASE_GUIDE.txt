@@ -1,0 +1,43 @@
+SAMAR STORE - SUPABASE DATABASE MANAGEMENT GUIDE
+==============================================
+This guide explains how to manage your database backup, format, and restoration.
+
+1. HOW TO BACKUP (DATA & LOGIC)
+-------------------------------
+Currently, the backup is manual but comprehensive:
+- Metadata: Tables, migrations, and extensions are snapshotted to JSON.
+- Data: Every table in the 'public' schema is exported to JSON in 'supabase/backup/data/'.
+- Edge Functions: All logic is retrieved and saved in 'supabase/backup/edge_functions/'.
+
+To perform a new backup:
+- Use a tool (like this AI assistant) to run the 'Full Supabase Backup' workflow.
+- Or use the Supabase CLI if installed: 'supabase db dump --data-only'
+
+2. HOW TO FORMAT/DELETE DATABASE
+--------------------------------
+WARNING: This is destructive and deletes ALL data in the public schema.
+Run this SQL in the Supabase Dashboard SQL Editor:
+
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO anon;
+GRANT ALL ON SCHEMA public TO authenticated;
+GRANT ALL ON SCHEMA public TO service_role;
+COMMENT ON SCHEMA public IS 'standard public schema';
+
+3. HOW TO RESTORE SCHEMA
+------------------------
+To re-initialize the tables and RLS policies:
+- Open 'supabase/sql/combined_backup.sql'
+- Copy the entire content.
+- Paste it into the Supabase Dashboard SQL Editor and run it.
+- This will recreate all 23 tables, triggers, and security policies.
+
+FILE LOCATIONS:
+---------------
+- Schema Baseline: supabase/sql/combined_backup.sql
+- Data Backups:    supabase/backup/data/
+- Logic Backups:   supabase/backup/edge_functions/
+
+Last Updated: 2026-02-09
