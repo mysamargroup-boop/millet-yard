@@ -410,7 +410,7 @@ export default function SettingsForm({ settings, mode = 'all', siteImages = [] }
                   </h4>
                   <div className="grid gap-2">
                     <Label htmlFor="google_verification_code">Google Site Verification Code</Label>
-                    <Input id="google_verification_code" name="google_verification_code" defaultValue={settings.google_verification_code || ''} placeholder="AIzaSy..." className="glass-input" />
+                    <Input id="google_verification_code" name="google_verification_code" defaultValue={settings.google_verification_code || ''} placeholder="Enter Google verification code" className="glass-input" />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="google_tag_manager_id">Google Tag Manager ID</Label>
