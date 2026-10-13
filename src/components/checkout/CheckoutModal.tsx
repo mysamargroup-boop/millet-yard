@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
+import Script from 'next/script';
 import {
   Dialog,
   DialogContent,
@@ -971,6 +972,7 @@ const CheckoutModal = ({ isOpen, onOpenChange, checkoutInput, checkoutMode }: Ch
           <DialogDescription>{getDescription()}</DialogDescription>
         </DialogHeader>
         {renderContent()}
+        <Script id="cashfree-js" src="https://sdk.cashfree.com/js/v3/cashfree.js" strategy="lazyOnload" />
         <audio ref={audioRef} src="https://cdn.freesound.org/previews/270/270319_5122242-lq.mp3" preload="auto" />
       </DialogContent>
     </Dialog>

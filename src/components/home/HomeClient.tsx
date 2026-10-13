@@ -73,24 +73,9 @@ export default function HomeClient({ settings, tags, initialBundle }: HomeClient
   )
 
   useEffect(() => {
-    // If SSR bundle was already provided, trigger silent background revalidation without blocking UI
+    // If SSR bundle was provided, skip duplicate client-side fetch to save mobile network & CPU
     if (initialBundle && initialBundle.products && initialBundle.products.length > 0) {
-      getHomeBundle().then(bundle => {
-        if (bundle?.products?.length) {
-          setProducts(bundle.products)
-          setAllCategories(bundle.categories || [])
-          setSiteImages(bundle.siteImages || [])
-          setSlidingCards(bundle.slidingCards || [])
-          setFeaturedCategories(
-            (bundle.featuredCategories && bundle.featuredCategories.length > 0)
-              ? bundle.featuredCategories
-              : (bundle.categories || [])
-          )
-          setVideos(bundle.videos || [])
-          setTestimonials(bundle.testimonials || [])
-        }
-      }).catch(() => {})
-      return
+      return;
     }
 
     async function fetchData() {

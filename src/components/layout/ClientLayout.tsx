@@ -153,7 +153,6 @@ function MainLayout({ children }: { children: React.ReactNode }) {
                         <CookieConsent />
                     </CustomerAuthProvider>
                 </AuthProvider>
-                <Script id="cashfree-js" src="https://sdk.cashfree.com/js/v3/cashfree.js" strategy="lazyOnload" />
             </ThemeProvider>
         </>
     );

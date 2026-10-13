@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ShieldCheck,
@@ -958,17 +959,20 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-stone-50">
-          <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading Checkout...</span>
+    <>
+      <Script id="cashfree-js" src="https://sdk.cashfree.com/js/v3/cashfree.js" strategy="lazyOnload" />
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center bg-stone-50">
+            <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Loading Checkout...</span>
+            </div>
           </div>
-        </div>
-      }
-    >
-      <CheckoutContent />
-    </Suspense>
+        }
+      >
+        <CheckoutContent />
+      </Suspense>
+    </>
   );
 }

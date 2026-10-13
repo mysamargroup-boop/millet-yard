@@ -32,31 +32,9 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const [checkoutMode, setCheckoutMode] = useState<'whatsapp' | 'payment'>('payment');
   const { settings } = useSettings();
   const [isClient, setIsClient] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsClient(true);
-    if (!('IntersectionObserver' in window)) {
-      setIsVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px -40px 0px',
-      }
-    );
-    if (cardRef.current) {
-      observer.observe(cardRef.current);
-    }
-    return () => observer.disconnect();
   }, []);
 
   const categorySlug = product.category ? slugify(product.category.split(',')[0].trim()) : 'uncategorized';
@@ -139,15 +117,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
 
   return (
-    <div
-      ref={cardRef}
-      className={cn(
-        "h-full transition-all duration-700 ease-out transform",
-        isVisible
-          ? "opacity-100 translate-y-0 scale-100"
-          : "opacity-0 translate-y-6 scale-[0.98]"
-      )}
-    >
+    <div className="h-full w-full">
       <Card className="flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl group bg-card h-full relative rounded-2xl border hover:border-emerald-500/30">
         {/* ... existing card content ... */}
         <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">

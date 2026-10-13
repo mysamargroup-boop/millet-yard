@@ -22,15 +22,15 @@ export default function BrandSplashLoader({ logoUrl = '/logo.png' }: BrandSplash
       return;
     }
 
-    // Phase 1: Keep blinking logo visible for 1.4 seconds
+    // Phase 1: Keep blinking logo visible for 900ms
     const fadeTimer = setTimeout(() => {
       setIsFading(true);
-    }, 1400);
+    }, 900);
 
-    // Phase 2: Complete smooth fade-out and unmount from DOM at 2.0 seconds
+    // Phase 2: Complete smooth fade-out and unmount from DOM at 1300ms
     const unmountTimer = setTimeout(() => {
       setIsVisible(false);
-    }, 2000);
+    }, 1300);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -79,11 +79,6 @@ export default function BrandSplashLoader({ logoUrl = '/logo.png' }: BrandSplash
           <span className="w-2 h-2 rounded-full bg-emerald-700 animate-ping" style={{ animationDuration: '1.2s', animationDelay: '0.2s' }} />
           <span className="w-2 h-2 rounded-full bg-emerald-800 animate-ping" style={{ animationDuration: '1.2s', animationDelay: '0.4s' }} />
         </div>
-
-        {/* Minimal Brand Tagline */}
-        <p className="mt-3 text-xs sm:text-[13px] tracking-widest font-semibold uppercase text-emerald-900/80 dark:text-emerald-300/80 text-center animate-pulse">
-          100% Pure • Native Millets • Superfoods
-        </p>
       </div>
     </div>
   );

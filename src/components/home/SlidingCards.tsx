@@ -98,62 +98,100 @@ export default function SlidingCards({ cards, autoPlay = true, interval = 5000 }
     setCurrentIndex(index);
   };
 
-  if (displayCards.length === 0) return null;
+  // Touch swipe support for mobile
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
-  const currentCard = displayCards[currentIndex];
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX || !touchEndX) return;
+    const distance = touchStartX - touchEndX;
+    if (distance > 50) {
+      goToNext();
+      setProgress(0);
+    } else if (distance < -50) {
+      goToPrevious();
+      setProgress(0);
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+  };
+
+  if (displayCards.length === 0) return null;
 
   return (
     <div
-      className="relative w-full overflow-hidden" // Removed mb-8 to reduce gap
+      className="relative w-full overflow-hidden select-none"
     >
-      {/* Main Card Container */}
-      <div className="relative aspect-[4/5] md:aspect-[16/9] w-auto mx-4 md:w-full md:max-w-6xl md:mx-auto overflow-hidden rounded-2xl group">
-        {currentCard.link_url ? (
-          <Link
-            href={currentCard.link_url}
-            className="block w-full h-full"
-          >
-            <Image
-              src={currentCard.image_url}
-              alt={currentCard.title}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              data-ai-hint={currentCard.image_hint}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 100vw, 80vw"
-              priority
-            />
-            {/* Gradient Overlay for better text readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent z-10" />
-          </Link>
-        ) : (
-          <>
-            <Image
-              src={currentCard.image_url}
-              alt={currentCard.title}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              data-ai-hint={currentCard.image_hint}
-              placeholder="blur"
-              blurDataURL={BLUR_DATA_URL}
-              sizes="(max-width: 768px) 100vw, 80vw"
-            />
-            {/* Gradient Overlay for better text readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent z-10" />
-          </>
-        )}
+      {/* Main Sliding Container with touch events */}
+      <div
+        className="relative aspect-[4/5] md:aspect-[16/9] w-auto mx-4 md:w-full md:max-w-6xl md:mx-auto overflow-hidden rounded-2xl group touch-pan-y"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Animated Slide Track */}
+        <div
+          className="flex h-full w-full transition-transform duration-500 ease-out"
+          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+        >
+          {displayCards.map((card, index) => (
+            <div key={card.id || index} className="relative min-w-full h-full flex-shrink-0">
+              {card.link_url ? (
+                <Link
+                  href={card.link_url}
+                  className="block w-full h-full relative"
+                >
+                  <Image
+                    src={card.image_url}
+                    alt={card.title}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    data-ai-hint={card.image_hint}
+                    placeholder="blur"
+                    blurDataURL={BLUR_DATA_URL}
+                    sizes="(max-width: 768px) 100vw, 80vw"
+                    priority={index === 0}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent z-10" />
+                </Link>
+              ) : (
+                <div className="w-full h-full relative">
+                  <Image
+                    src={card.image_url}
+                    alt={card.title}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    data-ai-hint={card.image_hint}
+                    placeholder="blur"
+                    blurDataURL={BLUR_DATA_URL}
+                    sizes="(max-width: 768px) 100vw, 80vw"
+                    priority={index === 0}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent z-10" />
+                </div>
+              )}
 
-        {/* Content Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 z-20 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-          <h3 className="text-2xl md:text-3xl font-bold font-headline mb-2 drop-shadow-lg">
-            {currentCard.title}
-          </h3>
-          {currentCard.description && (
-            <p className="text-sm md:text-base opacity-90 drop-shadow-md line-clamp-3">
-              {currentCard.description}
-            </p>
-          )}
+              {/* Content Overlay */}
+              <div className="absolute bottom-0 left-0 right-0 p-6 z-20 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pointer-events-none">
+                <h3 className="text-2xl md:text-3xl font-bold font-headline mb-2 drop-shadow-lg">
+                  {card.title}
+                </h3>
+                {card.description && (
+                  <p className="text-sm md:text-base opacity-90 drop-shadow-md line-clamp-3">
+                    {card.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

@@ -148,7 +148,8 @@ export default function PopularProducts({ products }: { products: Product[] }) {
                 <Carousel
                     opts={{
                         align: "start",
-                        loop: true,
+                        loop: finalDisplayProducts.length > 5,
+                        dragFree: false,
                     }}
                     plugins={[autoplayPlugin.current]}
                     className="w-full"

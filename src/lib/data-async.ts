@@ -124,7 +124,6 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | undefi
 
 export async function getTags(): Promise<string[]> {
   try {
-    noStore();
     const tags = await getTagsFromSupabase();
     return tags || [];
   } catch (error) {
@@ -134,8 +133,6 @@ export async function getTags(): Promise<string[]> {
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {
-  noStore();
-
   // 1. Try Redis Cache first
   const cacheKey = 'site-settings';
   try {
@@ -231,7 +228,6 @@ export async function getReviewsByProductId(productId: string): Promise<Review[]
 }
 
 export async function getHomeBundleServer(): Promise<import('./types').HomeBundle> {
-  noStore();
   const { getHomeBundleServer: fetchBundle } = await import('./data-supabase');
   return fetchBundle();
 }
